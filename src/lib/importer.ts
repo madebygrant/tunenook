@@ -1,4 +1,4 @@
-import { addTrack, createPlaylist, getTracks, hasArt } from "./library";
+import { addTrack, albumCover, createPlaylist, getTracks, hasArt } from "./library";
 import { isPlaylistFile, m3uEntries, matchEntries, playlistName } from "./m3u";
 import { albumKey, guessFromFileName, isAudioFile, sourceKey } from "./tags";
 import type { Track, TrackSource } from "./types";
@@ -71,7 +71,7 @@ function mayNotPlay(type: string): boolean {
   return probe.canPlayType(type) === "";
 }
 
-async function downscale(blob: Blob): Promise<Blob | null> {
+export async function downscale(blob: Blob): Promise<Blob | null> {
   try {
     const bitmap = await createImageBitmap(blob);
     const scale = Math.min(1, ART_SIZE / Math.max(bitmap.width, bitmap.height));
@@ -103,11 +103,12 @@ export async function readTrack(file: File, source: TrackSource, pendingArt: Set
   // Compilations without an album artist would otherwise split into one album per track artist.
   const albumArtist = c?.albumartist?.trim() || (c?.compilation ? "Various artists" : artist);
   const id = crypto.randomUUID();
-  const artId = album ? `album:${albumKey(albumArtist, album)}` : `track:${id}`;
+  const existing = album ? albumCover(albumKey(albumArtist, album)) : null;
+  const artId = existing ?? (album ? `album:${albumKey(albumArtist, album)}` : `track:${id}`);
 
   let art: ReadTrack["art"];
   const cover = selectCover(c?.picture);
-  const known = hasArt(artId) || pendingArt.has(artId);
+  const known = existing !== null || hasArt(artId) || pendingArt.has(artId);
   if (cover && !known) {
     const blob = await downscale(new Blob([cover.data as BlobPart], { type: cover.format }));
     if (blob) {

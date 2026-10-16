@@ -3,6 +3,7 @@ import { formatTotal, plural } from "../lib/format";
 import { addToPlaylist, createPlaylist, deletePlaylist, getPlaylists, renamePlaylist, savePlaylist, setLikes, totalSeconds, useLikedTracks, usePlaylists, useTrackMap, useTracks } from "../lib/library";
 import { playTracks } from "../lib/player";
 import { matchesSearch, searchWords, useListPlayback } from "../lib/useListPlayback";
+import { movePlaylistRow, visiblePositions } from "../lib/playlistMoves";
 import { withInserted, withoutIndexes } from "../lib/playlists";
 import { useSelection } from "../lib/useSelection";
 import type { Playlist, Track } from "../lib/types";
@@ -166,7 +167,8 @@ export function PlaylistPage({
 }: {
   id: string;
   onBack: () => void;
-  onMore: (track: Track, index: number) => void;
+  // index is the song's position in the playlist; row is its place among the songs shown.
+  onMore: (track: Track, index: number, row: number) => void;
   onToast: (message: string, undo?: () => void) => void;
 }) {
   const playlist = usePlaylists().find((p) => p.id === id);
@@ -178,11 +180,7 @@ export function PlaylistPage({
   const [confirming, setConfirming] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const selection = useSelection(tracks);
-  // Rows skip ids whose song has left the library, so row i isn't always playlist position i.
-  const positions = useMemo(
-    () => (playlist ? playlist.trackIds.flatMap((trackId, at) => (byId.has(trackId) ? [at] : [])) : []),
-    [playlist, byId],
-  );
+  const positions = useMemo(() => (playlist ? visiblePositions(playlist, (trackId) => byId.has(trackId)) : []), [playlist, byId]);
 
   if (!playlist) {
     return (
@@ -282,8 +280,9 @@ export function PlaylistPage({
           currentIndex={currentIndex}
           playing={playing}
           onPlay={onPlay}
-          onMore={(i) => onMore(tracks[i], positions[i])}
+          onMore={(i) => onMore(tracks[i], positions[i], i)}
           selection={selection}
+          onReorder={(from, to) => movePlaylistRow(current.id, from, to)}
         />
       )}
       {adding && <AddSongs playlist={playlist} onClose={() => setAdding(false)} />}

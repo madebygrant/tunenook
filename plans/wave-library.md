@@ -49,7 +49,7 @@ Risk: removing from the library deletes stored copies and can't be undone. Keep 
 
 Exit criterion: standard check passes. Select ten songs on Songs, add them to a new playlist, then remove three of them from that playlist and undo.
 
-## Wave 4: playlist reorder
+## Wave 4: playlist reorder [done 2026-10-16]
 
 Goal: reorder a playlist by dragging.
 
@@ -61,7 +61,7 @@ Items:
 
 Exit criterion: standard check passes. Drag a song from the bottom of a 30-song playlist to the top on a touch emulator, reload, and the order holds.
 
-## Wave 5: tag editing
+## Wave 5: tag editing [done 2026-10-16]
 
 Goal: fix wrong or missing tags inside the app.
 

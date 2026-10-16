@@ -138,6 +138,15 @@ export function pushView(view: View): void {
   });
 }
 
+// For a page whose address changed under it, such as a renamed album: Back still goes where it went before.
+export function replaceView(view: View): void {
+  whenSettled(() => {
+    const depth = layerDepth();
+    if (depth > 0) goBack(depth);
+    whenSettled(() => history.replaceState(entryState(view), "", viewHash(view)));
+  });
+}
+
 export function openLayer(layer: Layer): () => void {
   listen();
   open.push(layer);

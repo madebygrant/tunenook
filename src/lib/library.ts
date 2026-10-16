@@ -175,6 +175,20 @@ export function getFolders(): LinkedFolder[] {
   return folders;
 }
 
+// The cover an album's songs already use, so an imported song joins it rather than bringing its own.
+export function albumCover(key: string): string | null {
+  for (const album of albums) if (album.key === key) return album.artId;
+  return null;
+}
+
+export function hasArtist(key: string): boolean {
+  return artistKeys.has(key);
+}
+
+export function hasAlbum(key: string): boolean {
+  return albums.some((a) => a.key === key);
+}
+
 export function hasArt(artId: string): boolean {
   return artUsers.has(artId);
 }
@@ -316,6 +330,95 @@ export function updateTracks(patches: ReadonlyMap<string, TrackPatch>, options: 
 
 export function updateTrack(id: string, patch: TrackPatch, options: { now?: boolean; failure?: string } = {}): Promise<boolean> {
   return updateTracks(new Map([[id, patch]]), options);
+}
+
+export type TagEdit = Partial<Pick<Track, "title" | "artist" | "album" | "albumArtist" | "trackNo" | "discNo" | "year">>;
+
+// Art ids left with no songs by these changes, whose images can go.
+function freeArt(changes: [from: string | null, to: string | null][]): string[] {
+  const delta = new Map<string, number>();
+  for (const [from, to] of changes) {
+    if (from === to) continue;
+    if (from) delta.set(from, (delta.get(from) ?? 0) - 1);
+    if (to) delta.set(to, (delta.get(to) ?? 0) + 1);
+  }
+  return [...delta].filter(([id, d]) => d < 0 && (artUsers.get(id) ?? 0) + d <= 0).map(([id]) => id);
+}
+
+const newArtId = () => `art:${crypto.randomUUID()}`;
+
+// The importer reuses an album:<key> image for that album, so a song leaving the album can't keep that id.
+const namedForOtherAlbum = (artId: string | null, t: Track) => artId?.startsWith("album:") && artId !== `album:${trackAlbumKey(t)}`;
+
+// Saves before touching memory, so a failed save changes nothing. A song moved to another album takes its cover,
+// or keeps its own if that album has none. Untagged songs keep theirs.
+export function editTracks(edits: ReadonlyMap<string, TagEdit>): Promise<boolean> {
+  return queueTrackWrite(async () => {
+    const moving = new Set([...edits.keys()].filter((id) => store.has(id)));
+    if (moving.size === 0) return false;
+    const covers = new Map<string, string>();
+    for (const t of store.values()) {
+      if (t.artId && !moving.has(t.id) && !covers.has(trackAlbumKey(t))) covers.set(trackAlbumKey(t), t.artId);
+    }
+    const copies = new Map<string, string>();
+    const changes = [...moving].map((id) => {
+      const before = store.get(id)!;
+      const next = { ...before, ...edits.get(id) };
+      const key = trackAlbumKey(next);
+      let artId = next.album && key !== trackAlbumKey(before) ? (covers.get(key) ?? before.artId) : before.artId;
+      if (artId && namedForOtherAlbum(artId, next)) {
+        if (!copies.has(artId)) copies.set(artId, newArtId());
+        artId = copies.get(artId)!;
+      }
+      return { before, next: { ...next, artId } };
+    });
+    const unusedArt = freeArt(changes.map(({ before, next }) => [before.artId, next.artId]));
+    try {
+      const images = await Promise.all([...copies].map(async ([from, to]) => [to, await get<Blob>("art", from)] as const));
+      await write([
+        ...images.filter(([, blob]) => blob).map(([key, value]): Write => ({ store: "art", op: "put", key, value })),
+        ...changes.map(({ next }): Write => ({ store: "tracks", op: "put", value: next })),
+        ...unusedArt.map((key): Write => ({ store: "art", op: "delete", key })),
+      ]);
+    } catch (e) {
+      reportError("Couldn't save the changes. Nothing was changed.", e);
+      return false;
+    }
+    unusedArt.forEach(forgetArt);
+    // On the latest copy, so a like or play counted during the write survives.
+    for (const { before, next } of changes) {
+      putTrack({ ...(store.get(before.id) ?? before), ...edits.get(before.id), artId: next.artId });
+    }
+    publish();
+    return true;
+  });
+}
+
+// A fresh id per image, so covers already on screen under the old id needn't be reloaded in place.
+export function setAlbumArt(key: string, blob: Blob): Promise<boolean> {
+  return queueTrackWrite(async () => {
+    const artId = newArtId();
+    const songs = [...store.values()].filter((t) => trackAlbumKey(t) === key);
+    if (songs.length === 0) return false;
+    const unusedArt = freeArt(songs.map((t) => [t.artId, artId]));
+    try {
+      await write([
+        { store: "art", op: "put", key: artId, value: blob },
+        ...songs.map((t): Write => ({ store: "tracks", op: "put", value: { ...t, artId } })),
+        ...unusedArt.map((key): Write => ({ store: "art", op: "delete", key })),
+      ]);
+    } catch (e) {
+      reportError("Couldn't save the artwork. Nothing was changed.", e);
+      return false;
+    }
+    unusedArt.forEach(forgetArt);
+    for (const t of songs) {
+      const latest = store.get(t.id);
+      if (latest) putTrack({ ...latest, artId });
+    }
+    publish();
+    return true;
+  });
 }
 
 export async function recordPlay(id: string): Promise<void> {

@@ -157,3 +157,68 @@ describe("groupArtists", () => {
     expect(artist.songs.map((t) => t.id)).toEqual(["untagged"]);
   });
 });
+
+describe("editTracks", () => {
+  it("moves an untagged song onto an album and gives it that album's cover", async () => {
+    const { library, db } = await load();
+    const albumArt = "album:queen\ninnuendo";
+    await library.addTrack({ track: makeTrack("a", { artist: "Queen", albumArtist: "Queen", album: "Innuendo", artId: albumArt }), art: art(albumArt) });
+    await library.addTrack({ track: makeTrack("b", { artId: "track:b" }), art: art("track:b") });
+    expect(await library.editTracks(new Map([["b", { artist: "Queen", albumArtist: "Queen", album: "Innuendo" }]]))).toBe(true);
+    expect(library.getTrack("b")?.artId).toBe(albumArt);
+    expect(library.groupAlbums(library.getTracks()).find((a) => a.title === "Innuendo")?.tracks.map((t) => t.id)).toEqual(["a", "b"]);
+    expect(await db.get("art", "track:b")).toBeUndefined();
+    expect((await db.get<import("./types").Track>("tracks", "b"))?.album).toBe("Innuendo");
+  });
+
+  it("keeps a song's cover when its new album has none, and leaves the old album's cover to the songs still on it", async () => {
+    const { library, db } = await load();
+    const old = "album:artist\nlamplight";
+    for (const id of ["a", "b"]) await library.addTrack({ track: makeTrack(id, { album: "Lamplight", artId: old }), art: art(old) });
+    await library.editTracks(new Map([["a", { album: "Ember" }]]));
+    const copy = library.getTrack("a")?.artId;
+    expect(copy).toMatch(/^art:/);
+    expect(await db.get("art", copy!)).toBeDefined();
+    expect(library.getTrack("b")?.artId).toBe(old);
+    expect(await db.get("art", old)).toBeDefined();
+  });
+
+  it("gives a renamed album its own copy of the cover, so the old name's cover is free for that album", async () => {
+    const { library, db } = await load();
+    const old = "album:artist\nlamplight";
+    for (const id of ["a", "b"]) await library.addTrack({ track: makeTrack(id, { album: "Lamplight", artId: old }), art: art(old) });
+    await library.editTracks(new Map(["a", "b"].map((id) => [id, { album: "Ember" }])));
+    const copy = library.getTrack("a")?.artId;
+    expect(copy).toMatch(/^art:/);
+    expect(library.getTrack("b")?.artId).toBe(copy);
+    expect(await db.get("art", copy!)).toBeDefined();
+    expect(await db.get("art", old)).toBeUndefined();
+    expect(library.hasArt(old)).toBe(false);
+  });
+
+  it("changes nothing when the save fails", async () => {
+    const { library } = await load();
+    await library.addTrack({ track: makeTrack("a") });
+    const errors = vi.fn();
+    library.onStorageError(errors);
+    vi.spyOn(await import("./db"), "write").mockRejectedValueOnce(new DOMException("Full", "QuotaExceededError"));
+    expect(await library.editTracks(new Map([["a", { title: "New" }]]))).toBe(false);
+    expect(library.getTrack("a")?.title).toBe("Song a");
+    expect(errors).toHaveBeenCalledWith("Couldn't save the changes. Nothing was changed.");
+  });
+});
+
+describe("setAlbumArt", () => {
+  it("puts one cover on every song of the album and drops covers nothing uses any more", async () => {
+    const { library, db } = await load();
+    await library.addTrack({ track: makeTrack("a", { album: "Lamplight", artId: "track:a" }), art: art("track:a") });
+    await library.addTrack({ track: makeTrack("b", { album: "Lamplight" }) });
+    const key = library.trackAlbumKey(library.getTrack("a")!);
+    expect(await library.setAlbumArt(key, new Blob(["new"]))).toBe(true);
+    const [a, b] = ["a", "b"].map((id) => library.getTrack(id)?.artId);
+    expect(a).toMatch(/^art:/);
+    expect(b).toBe(a);
+    expect(await db.get("art", "track:a")).toBeUndefined();
+    expect(await db.get("art", a!)).toBeDefined();
+  });
+});

@@ -12,9 +12,10 @@ import { Sidebar, type View } from "./components/Sidebar";
 import { SongMenu, type MenuTarget } from "./components/SongMenu";
 import { Songs } from "./components/Songs";
 import { Button } from "./components/ui";
+import { useAnnouncement } from "./lib/announce";
 import { isShortcut } from "./lib/keys";
-import { currentView, onViewPop, pushView, startHistory, viewHash } from "./lib/history";
-import { getTracks, onStorageError, useAlbums, useArtists, useLibraryLoaded, useLoadError, usePlaylists, useTrackMap } from "./lib/library";
+import { currentView, onViewPop, pushView, replaceView, startHistory, viewHash } from "./lib/history";
+import { artistKey, getTracks, hasAlbum, hasArtist, onStorageError, trackAlbumKey, useAlbums, useArtists, useLibraryLoaded, useLoadError, usePlaylists, useTrackMap } from "./lib/library";
 import { useNowPlaying } from "./lib/player";
 import { applyUpdate, useReloadPending, useUpdateReady } from "./lib/pwa";
 import type { Track } from "./lib/types";
@@ -45,16 +46,23 @@ export default function App() {
   const [toast, setToast] = useState<Toast | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const updateReady = useUpdateReady();
+  const announcement = useAnnouncement();
   const reloadPending = useReloadPending();
   const main = useRef<HTMLElement>(null);
   const menuButton = useRef<HTMLButtonElement>(null);
   const navigated = useRef(false);
+  // Set when the page's address changes because its album or artist was renamed, which isn't a new page.
+  const followed = useRef(false);
   const drawer = useMediaQuery("(max-width: 959px)");
   const nowTrack = now.id ? byId.get(now.id) : undefined;
   const hasDock = nowTrack !== undefined;
 
 
   useEffect(() => {
+    if (followed.current) {
+      followed.current = false;
+      return;
+    }
     main.current?.scrollTo(0, 0);
     // Moving focus to the heading announces the new view; the first render keeps the browser default.
     if (navigated.current) main.current?.querySelector("h1")?.focus({ preventScroll: true });
@@ -158,6 +166,22 @@ export default function App() {
     setToast({ message, action: undo && { label: "Undo", icon: <UndoIcon />, run: undo } });
   }, []);
 
+  const follow = useCallback((next: View) => {
+    followed.current = true;
+    replaceView(next);
+    setView(next);
+  }, []);
+
+  // An edit can empty the album or artist page it was made from; the page then follows the song.
+  const followEdit = useCallback((before: Track, after: Track) => {
+    if (view.kind === "album" && view.key === trackAlbumKey(before) && !hasAlbum(view.key)) {
+      follow({ ...view, key: trackAlbumKey(after) });
+    } else if (view.kind === "artist" && !hasArtist(view.key)) {
+      const key = [after.albumArtist, after.artist].map(artistKey).find(hasArtist);
+      if (key) follow({ kind: "artist", key });
+    }
+  }, [view, follow]);
+
   const openMenu = useCallback((track: Track, context: MenuTarget["context"]) => setMenu({ track, context }), []);
 
   const covered = navOpen && drawer;
@@ -246,6 +270,7 @@ export default function App() {
             // The origin's entry sits right behind this one, so Back keeps history linear.
             onBack={() => (view.from ? history.back() : navigate({ kind: "albums" }))}
             onMore={(t) => openMenu(t, { kind: "library" })}
+            onRenamed={(key) => follow({ ...view, key })}
             onToast={showToast}
           />
         ) : view.kind === "artists" ? (
@@ -268,7 +293,7 @@ export default function App() {
             key={view.id}
             id={view.id}
             onBack={() => navigate({ kind: "playlists" })}
-            onMore={(t, index) => openMenu(t, { kind: "playlist", playlistId: view.id, index })}
+            onMore={(t, index, row) => openMenu(t, { kind: "playlist", playlistId: view.id, index, row })}
             onToast={showToast}
           />
         ) : view.kind === "queue" ? (
@@ -278,6 +303,9 @@ export default function App() {
         )}
       </main>
 
+      <div className="sr-only" role="status">
+        {announcement}
+      </div>
       <div className="toast-host" role="status">
         {notice && (
           <div className="toast">
@@ -298,7 +326,7 @@ export default function App() {
           </div>
         )}
       </div>
-      {menu && <SongMenu target={menu} onClose={() => setMenu(null)} onNavigate={navigate} onToast={showToast} />}
+      {menu && <SongMenu target={menu} onClose={() => setMenu(null)} onNavigate={navigate} onEdited={followEdit} onToast={showToast} />}
       {shortcutsOpen && <Shortcuts onClose={() => setShortcutsOpen(false)} />}
 
       {nowTrack && (

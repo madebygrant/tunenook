@@ -1730,6 +1730,34 @@ b.mono {
   flex: none;
   margin-right: 4px;
 }
+.song-grip {
+  flex: none;
+  margin-left: 4px;
+  cursor: grab;
+  touch-action: none;
+}
+.song-grip svg {
+  width: 16px;
+  height: 16px;
+}
+.songs.is-dragging {
+  user-select: none;
+}
+.songs.is-dragging .song-grip {
+  cursor: grabbing;
+}
+.song.is-dragged {
+  z-index: 1;
+  background: var(--surface-hover);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.4);
+}
+.songs.is-dragging .song {
+  transform: translateY(var(--drag-y, 0));
+  transition: transform 150ms var(--ease);
+}
+.songs.is-dragging .song.is-dragged {
+  transition: none;
+}
 .songs.is-selecting {
   user-select: none;
 }
@@ -2010,7 +2038,8 @@ b.mono {
   }
   .xh-btn::before,
   .xh-icon-btn svg,
-  .xh-play svg {
+  .xh-play svg,
+  .songs.is-dragging .song {
     transition: none;
   }
 }
@@ -2031,4 +2060,18 @@ b.mono {
   display: grid;
   gap: 12px;
   justify-items: start;
+}
+.details-form {
+  display: grid;
+  gap: 16px;
+}
+.details-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.details-note,
+.details-preview {
+  font-size: 14px;
+  color: var(--text-muted);
 }

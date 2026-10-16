@@ -3,18 +3,21 @@ import { plural } from "../lib/format";
 import { canLinkFolders, copyIntoLibrary, NeedsAccessError, requestAccess } from "../lib/folders";
 import { addToPlaylist, artistPageFor, createPlaylist, toggleLike, getPlaylists, removeTracksSafely, savePlaylist, usePlaylists } from "../lib/library";
 import { addToQueue, playNext, removeFromQueue } from "../lib/player";
-import { missingFrom, moved, withoutIndexes } from "../lib/playlists";
+import { movePlaylistRow, visiblePositions } from "../lib/playlistMoves";
+import { missingFrom, withoutIndexes } from "../lib/playlists";
 import { libraryRemovalMessage } from "../lib/removal";
 import { albumKey } from "../lib/tags";
 import type { Playlist, Track } from "../lib/types";
 import { Dialog } from "./Dialog";
+import { TrackDetails } from "./EditDetails";
 import { CloseIcon, PlusIcon } from "./icons";
 import { Button, TextField } from "./ui";
 import type { View } from "./Sidebar";
 
 export type MenuContext =
   | { kind: "library" }
-  | { kind: "playlist"; playlistId: string; index: number }
+  // index is the position in the playlist, for removal; row is the place among the songs shown, for moves.
+  | { kind: "playlist"; playlistId: string; index: number; row: number }
   | { kind: "queue"; pos: number };
 
 export interface MenuTarget {
@@ -26,12 +29,13 @@ interface Props {
   target: MenuTarget;
   onClose: () => void;
   onNavigate: (view: View) => void;
+  onEdited: (before: Track, after: Track) => void;
   onToast: (message: string, undo?: () => void) => void;
 }
 
-export function SongMenu({ target, onClose, onNavigate, onToast }: Props) {
+export function SongMenu({ target, onClose, onNavigate, onEdited, onToast }: Props) {
   const { track, context } = target;
-  const [step, setStep] = useState<"actions" | "pick" | "confirm">("actions");
+  const [step, setStep] = useState<"actions" | "pick" | "confirm" | "edit">("actions");
   const [error, setError] = useState<string | null>(null);
   const playlist = context.kind === "playlist" ? getPlaylists().find((p) => p.id === context.playlistId) : undefined;
 
@@ -69,6 +73,7 @@ export function SongMenu({ target, onClose, onNavigate, onToast }: Props) {
       label: track.likedAt === undefined ? "Like" : "Unlike",
       run: () => run(() => void toggleLike(track.id)),
     },
+    { label: "Edit details…", run: () => setStep("edit") },
   ];
   if (track.album) {
     items.push({
@@ -79,12 +84,12 @@ export function SongMenu({ target, onClose, onNavigate, onToast }: Props) {
   const artist = artistPageFor(track);
   if (artist) items.push({ label: "Go to artist", run: () => run(() => onNavigate({ kind: "artist", key: artist })) });
   if (context.kind === "playlist" && playlist) {
-    const { index } = context;
+    const { index, row } = context;
     const now = Date.now();
-    if (index > 0) items.push({ label: "Move up", run: () => editPlaylist((p) => moved(p, index, index - 1, now)) });
-    if (index < playlist.trackIds.length - 1) {
-      items.push({ label: "Move down", run: () => editPlaylist((p) => moved(p, index, index + 1, now)) });
-    }
+    const last = visiblePositions(playlist).length - 1;
+    const move = (to: number) => () => run(() => movePlaylistRow(playlist.id, row, to));
+    if (row > 0) items.push({ label: "Move to top", run: move(0) }, { label: "Move up", run: move(row - 1) });
+    if (row < last) items.push({ label: "Move down", run: move(row + 1) }, { label: "Move to bottom", run: move(last) });
     items.push({
       label: "Remove from playlist",
       danger: true,
@@ -100,6 +105,7 @@ export function SongMenu({ target, onClose, onNavigate, onToast }: Props) {
   return (
     <MenuSheet label={`${track.title} options`} title={track.title} subtitle={track.artist} onClose={onClose}>
       {step === "actions" && <MenuList items={items} />}
+      {step === "edit" && <TrackDetails track={track} onSaved={(message, edited) => run(() => onEdited(track, edited), message)} onCancel={() => setStep("actions")} />}
       {step === "pick" && <PlaylistPicker ids={[track.id]} name={track.title} onDone={(message) => run(() => {}, message)} />}
       {step === "confirm" && (
         <Confirm
@@ -118,10 +124,12 @@ export function SongMenu({ target, onClose, onNavigate, onToast }: Props) {
   );
 }
 
-interface MenuItem {
+export interface MenuItem {
   label: string;
   run: () => void;
   danger?: boolean;
+  // Opens a file picker instead; run is called once a file is chosen.
+  pick?: { accept: string; onPick: (file: File) => void };
 }
 
 export function MenuSheet({
@@ -158,12 +166,40 @@ function MenuList({ items }: { items: MenuItem[] }) {
     <ul className="menu-list">
       {items.map((item) => (
         <li key={item.label}>
-          <button className={`menu-item${item.danger ? " is-danger" : ""}`} onClick={item.run}>
-            {item.label}
-          </button>
+          {item.pick ? (
+            <FileMenuItem item={item} pick={item.pick} />
+          ) : (
+            <button className={`menu-item${item.danger ? " is-danger" : ""}`} onClick={item.run}>
+              {item.label}
+            </button>
+          )}
         </li>
       ))}
     </ul>
+  );
+}
+
+// The input sits in the sheet, since the page behind it is inert while the sheet is open.
+function FileMenuItem({ item, pick }: { item: MenuItem; pick: NonNullable<MenuItem["pick"]> }) {
+  const input = useRef<HTMLInputElement>(null);
+  return (
+    <>
+      <button className="menu-item" onClick={() => input.current?.click()}>
+        {item.label}
+      </button>
+      <input
+        ref={input}
+        type="file"
+        accept={pick.accept}
+        hidden
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          item.run();
+          pick.onPick(file);
+        }}
+      />
+    </>
   );
 }
 
@@ -246,6 +282,7 @@ export function CollectionMenu({
   subtitle,
   ids,
   excludePlaylistId,
+  extraItems = [],
   onClose,
   onToast,
 }: {
@@ -253,6 +290,7 @@ export function CollectionMenu({
   subtitle: string;
   ids: string[];
   excludePlaylistId?: string;
+  extraItems?: MenuItem[];
   onClose: () => void;
   onToast: (message: string) => void;
 }) {
@@ -277,6 +315,7 @@ export function CollectionMenu({
       },
     },
     { label: "Add to playlist…", run: () => setPicking(true) },
+    ...extraItems,
   ];
 
   return (
