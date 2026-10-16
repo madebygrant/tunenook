@@ -4,8 +4,9 @@ import { totalSeconds, useAlbums } from "../lib/library";
 import { playTracks } from "../lib/player";
 import { matchesSearch, searchWords, useListPlayback } from "../lib/useListPlayback";
 import type { Album, Track } from "../lib/types";
-import { ArrowLeftIcon, PlayIcon, ShuffleIcon } from "./icons";
+import { ArrowLeftIcon, MoreIcon, PlayIcon, ShuffleIcon } from "./icons";
 import { SearchField } from "./SearchField";
+import { CollectionMenu } from "./SongMenu";
 import { SongList } from "./SongList";
 import { Button, CoverArt } from "./ui";
 
@@ -64,15 +65,18 @@ export function AlbumPage({
   backLabel,
   onBack,
   onMore,
+  onToast,
 }: {
   albumKey: string;
   backLabel: string;
   onBack: () => void;
   onMore: (track: Track) => void;
+  onToast: (message: string) => void;
 }) {
   const album = useAlbums().find((a) => a.key === albumKey);
   const tracks = album?.tracks ?? [];
   const { currentIndex, playing, onPlay } = useListPlayback(tracks);
+  const [menuOpen, setMenuOpen] = useState(false);
   const ids = tracks.map((t) => t.id);
 
   if (!album) {
@@ -111,9 +115,19 @@ export function AlbumPage({
             <Button variant="secondary" icon={<ShuffleIcon />} onClick={() => playTracks(ids, -1, { shuffle: true })}>
               Shuffle
             </Button>
+            <Button variant="ghost" icon={<MoreIcon />} aria-label={`More for ${album.title}`} onClick={() => setMenuOpen(true)} />
           </div>
         </div>
       </div>
+      {menuOpen && (
+        <CollectionMenu
+          title={album.title}
+          subtitle={album.artist}
+          ids={ids}
+          onClose={() => setMenuOpen(false)}
+          onToast={onToast}
+        />
+      )}
       <SongList
         label={`${album.title} songs`}
         tracks={tracks}

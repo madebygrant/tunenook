@@ -1,8 +1,9 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
+import { plural } from "../lib/format";
 import { canLinkFolders, copyIntoLibrary, NeedsAccessError, requestAccess } from "../lib/folders";
 import { addToPlaylist, artistPageFor, createPlaylist, toggleLike, getPlaylists, removeTracksSafely, savePlaylist, usePlaylists } from "../lib/library";
 import { addToQueue, playNext, removeFromQueue } from "../lib/player";
-import { moved, withoutIndex } from "../lib/playlists";
+import { missingFrom, moved, withoutIndex } from "../lib/playlists";
 import { albumKey } from "../lib/tags";
 import type { Playlist, Track } from "../lib/types";
 import { Dialog } from "./Dialog";
@@ -59,7 +60,7 @@ export function SongMenu({ target, onClose, onNavigate, onToast }: Props) {
     }
   }
 
-  const items: { label: string; run: () => void; danger?: boolean }[] = [
+  const items: MenuItem[] = [
     { label: "Play next", run: () => run(() => playNext([track.id]), `${track.title} plays next.`) },
     { label: "Add to queue", run: () => run(() => addToQueue([track.id]), `Added ${track.title} to the queue.`) },
     { label: "Add to playlist…", run: () => setStep("pick") },
@@ -96,28 +97,9 @@ export function SongMenu({ target, onClose, onNavigate, onToast }: Props) {
   if (context.kind === "library") items.push({ label: "Remove from library…", danger: true, run: () => setStep("confirm") });
 
   return (
-    <Dialog label={`${track.title} options`} className="song-menu" onClose={onClose}>
-      <div className="dialog-head">
-        <div className="menu-title">
-          <span className="ttl">{track.title}</span>
-          <span className="sub">{track.artist}</span>
-        </div>
-        <button className="sheet-close" data-autofocus aria-label="Close" onClick={onClose}>
-          <CloseIcon />
-        </button>
-      </div>
-      {step === "actions" && (
-        <ul className="menu-list">
-          {items.map((item) => (
-            <li key={item.label}>
-              <button className={`menu-item${item.danger ? " is-danger" : ""}`} onClick={item.run}>
-                {item.label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {step === "pick" && <PlaylistPicker track={track} onDone={(message) => run(() => {}, message)} />}
+    <MenuSheet label={`${track.title} options`} title={track.title} subtitle={track.artist} onClose={onClose}>
+      {step === "actions" && <MenuList items={items} />}
+      {step === "pick" && <PlaylistPicker ids={[track.id]} name={track.title} onDone={(message) => run(() => {}, message)} />}
       {step === "confirm" && (
         <Confirm
           message={
@@ -135,13 +117,87 @@ export function SongMenu({ target, onClose, onNavigate, onToast }: Props) {
           {error}
         </p>
       )}
+    </MenuSheet>
+  );
+}
+
+interface MenuItem {
+  label: string;
+  run: () => void;
+  danger?: boolean;
+}
+
+export function MenuSheet({
+  label,
+  title,
+  subtitle,
+  onClose,
+  children,
+}: {
+  label: string;
+  title: string;
+  subtitle: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Dialog label={label} className="song-menu" onClose={onClose}>
+      <div className="dialog-head">
+        <div className="menu-title">
+          <span className="ttl">{title}</span>
+          <span className="sub">{subtitle}</span>
+        </div>
+        <button className="sheet-close" data-autofocus aria-label="Close" onClick={onClose}>
+          <CloseIcon />
+        </button>
+      </div>
+      {children}
     </Dialog>
   );
 }
 
-function PlaylistPicker({ track, onDone }: { track: Track; onDone: (message: string) => void }) {
-  const playlists = usePlaylists();
-  const [name, setName] = useState("");
+function MenuList({ items }: { items: MenuItem[] }) {
+  return (
+    <ul className="menu-list">
+      {items.map((item) => (
+        <li key={item.label}>
+          <button className={`menu-item${item.danger ? " is-danger" : ""}`} onClick={item.run}>
+            {item.label}
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// name is what the toast calls the songs being added: a song title, or an album, playlist or "the queue".
+export function PlaylistPicker({
+  ids,
+  name,
+  excludeId,
+  onDone,
+}: {
+  ids: string[];
+  name: string;
+  excludeId?: string;
+  onDone: (message: string) => void;
+}) {
+  const playlists = usePlaylists().filter((p) => p.id !== excludeId);
+  const [newName, setNewName] = useState("");
+  const [saving, setSaving] = useState(false);
+  // State alone can't stop a second submit fired before React re-renders.
+  const busy = useRef(false);
+
+  function addTo(p: Playlist) {
+    // A single song may repeat in a playlist, as before; a whole collection only fills in what's missing.
+    const adding = ids.length === 1 ? ids : missingFrom(p, ids);
+    if (adding.length === 0) return onDone(`${p.name} already has every song in ${name}.`);
+    void addToPlaylist(p.id, adding);
+    const skipped = ids.length - adding.length;
+    if (!skipped) return onDone(`Added ${name} to ${p.name}.`);
+    const already = skipped === 1 ? "1 was already in it" : `${skipped} were already in it`;
+    onDone(`Added ${plural(adding.length, "song")} from ${name} to ${p.name}. ${already}.`);
+  }
 
   return (
     <div className="picker">
@@ -149,15 +205,9 @@ function PlaylistPicker({ track, onDone }: { track: Track; onDone: (message: str
         <ul className="menu-list">
           {playlists.map((p) => (
             <li key={p.id}>
-              <button
-                className="menu-item"
-                onClick={() => {
-                  void addToPlaylist(p.id, [track.id]);
-                  onDone(`Added ${track.title} to ${p.name}.`);
-                }}
-              >
+              <button className="menu-item" onClick={() => addTo(p)}>
                 {p.name}
-                <span className="menu-note">{p.trackIds.includes(track.id) ? "Already in it" : ""}</span>
+                <span className="menu-note">{missingFrom(p, ids).length === 0 ? "Already in it" : ""}</span>
               </button>
             </li>
           ))}
@@ -165,26 +215,77 @@ function PlaylistPicker({ track, onDone }: { track: Track; onDone: (message: str
       )}
       <form
         className="inline-form"
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
-          if (!name.trim()) return;
-          void createPlaylist(name, [track.id]);
-          onDone(`Added ${track.title} to ${name.trim()}.`);
+          if (!newName.trim() || busy.current) return;
+          busy.current = true;
+          setSaving(true);
+          const created = await createPlaylist(newName, ids);
+          busy.current = false;
+          setSaving(false);
+          // On failure the library reports it and the form stays open with the name, for another try.
+          if (created) onDone(`Added ${name} to ${created.name}.`);
         }}
       >
         <TextField
           label="New playlist"
-          value={name}
+          value={newName}
           placeholder="Playlist name"
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => setNewName(e.target.value)}
           suffix={
-            <Button type="submit" variant="secondary" icon={<PlusIcon />} disabled={!name.trim()}>
+            <Button type="submit" variant="secondary" icon={<PlusIcon />} disabled={!newName.trim() || saving}>
               Create
             </Button>
           }
         />
       </form>
     </div>
+  );
+}
+
+// Actions on a whole album or playlist. excludePlaylistId keeps a playlist from being offered to itself.
+export function CollectionMenu({
+  title,
+  subtitle,
+  ids,
+  excludePlaylistId,
+  onClose,
+  onToast,
+}: {
+  title: string;
+  subtitle: string;
+  ids: string[];
+  excludePlaylistId?: string;
+  onClose: () => void;
+  onToast: (message: string) => void;
+}) {
+  const [picking, setPicking] = useState(false);
+  const done = (message: string) => {
+    onClose();
+    onToast(message);
+  };
+  const items: MenuItem[] = [
+    {
+      label: "Play next",
+      run: () => {
+        playNext(ids);
+        done(`${title} plays next.`);
+      },
+    },
+    {
+      label: "Add to queue",
+      run: () => {
+        addToQueue(ids);
+        done(`Added ${title} to the queue.`);
+      },
+    },
+    { label: "Add to playlist…", run: () => setPicking(true) },
+  ];
+
+  return (
+    <MenuSheet label={`${title} options`} title={title} subtitle={subtitle} onClose={onClose}>
+      {picking ? <PlaylistPicker ids={ids} name={title} excludeId={excludePlaylistId} onDone={done} /> : <MenuList items={items} />}
+    </MenuSheet>
   );
 }
 

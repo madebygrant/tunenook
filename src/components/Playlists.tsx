@@ -5,10 +5,10 @@ import { playTracks } from "../lib/player";
 import { matchesSearch, searchWords, useListPlayback } from "../lib/useListPlayback";
 import type { Playlist, Track } from "../lib/types";
 import { Dialog } from "./Dialog";
-import { ArrowLeftIcon, CheckIcon, CloseIcon, PencilIcon, PlayIcon, PlusIcon, ShuffleIcon, TrashIcon } from "./icons";
+import { ArrowLeftIcon, CheckIcon, CloseIcon, MoreIcon, PencilIcon, PlayIcon, PlusIcon, ShuffleIcon, TrashIcon } from "./icons";
 import { SearchField } from "./SearchField";
 import { SongList } from "./SongList";
-import { Confirm } from "./SongMenu";
+import { CollectionMenu, Confirm } from "./SongMenu";
 import { Button, CoverArt, TextField } from "./ui";
 
 function playlistTracks(p: Playlist, byId: Map<string, Track>): Track[] {
@@ -80,9 +80,18 @@ export function Playlists({ onOpen, onOpenLiked }: { onOpen: (id: string) => voi
   );
 }
 
-export function LikedPage({ onBack, onMore }: { onBack: () => void; onMore: (track: Track) => void }) {
+export function LikedPage({
+  onBack,
+  onMore,
+  onToast,
+}: {
+  onBack: () => void;
+  onMore: (track: Track) => void;
+  onToast: (message: string) => void;
+}) {
   const tracks = useLikedTracks();
   const { currentIndex, playing, onPlay } = useListPlayback(tracks);
+  const [menuOpen, setMenuOpen] = useState(false);
   const ids = tracks.map((t) => t.id);
 
   return (
@@ -107,9 +116,19 @@ export function LikedPage({ onBack, onMore }: { onBack: () => void; onMore: (tra
             <Button variant="secondary" icon={<ShuffleIcon />} disabled={!ids.length} onClick={() => playTracks(ids, -1, { shuffle: true })}>
               Shuffle
             </Button>
+            <Button variant="ghost" icon={<MoreIcon />} aria-label="More for Liked songs" disabled={!ids.length} onClick={() => setMenuOpen(true)} />
           </div>
         </div>
       </div>
+      {menuOpen && (
+        <CollectionMenu
+          title="Liked songs"
+          subtitle={plural(ids.length, "song")}
+          ids={ids}
+          onClose={() => setMenuOpen(false)}
+          onToast={onToast}
+        />
+      )}
       {tracks.length === 0 ? (
         <p className="list-empty muted">Songs you like show up here. Like one from its menu or the player, or press L while it plays.</p>
       ) : (
@@ -144,6 +163,7 @@ export function PlaylistPage({
   const [renaming, setRenaming] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   if (!playlist) {
     return (
@@ -206,6 +226,13 @@ export function PlaylistPage({
             <Button variant="secondary" icon={<PlusIcon />} onClick={() => setAdding(true)}>
               Add songs
             </Button>
+            <Button
+              variant="ghost"
+              icon={<MoreIcon />}
+              aria-label={`More for ${playlist.name}`}
+              disabled={!ids.length}
+              onClick={() => setMenuOpen(true)}
+            />
             <Button variant="ghost" icon={<PencilIcon />} onClick={() => setRenaming(playlist.name)}>
               Rename
             </Button>
@@ -228,6 +255,16 @@ export function PlaylistPage({
         />
       )}
       {adding && <AddSongs playlist={playlist} onClose={() => setAdding(false)} />}
+      {menuOpen && (
+        <CollectionMenu
+          title={playlist.name}
+          subtitle={plural(ids.length, "song")}
+          ids={ids}
+          excludePlaylistId={playlist.id}
+          onClose={() => setMenuOpen(false)}
+          onToast={onToast}
+        />
+      )}
       {confirming && (
         <Dialog label="Delete playlist" onClose={() => setConfirming(false)}>
           <div className="dialog-head">

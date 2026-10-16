@@ -13,6 +13,11 @@ export function withTracks(p: Playlist, ids: string[], now: number): Playlist {
   return { ...p, trackIds: [...p.trackIds, ...ids], updatedAt: now };
 }
 
+export function missingFrom(p: Playlist, ids: string[]): string[] {
+  const has = new Set(p.trackIds);
+  return ids.filter((id) => !has.has(id));
+}
+
 export function withoutIndex(p: Playlist, index: number, now: number): Playlist {
   if (index < 0 || index >= p.trackIds.length) return p;
   return { ...p, trackIds: p.trackIds.filter((_, i) => i !== index), updatedAt: now };

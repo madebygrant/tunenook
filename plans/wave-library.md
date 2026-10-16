@@ -22,7 +22,7 @@ Risk: `updateTrack` on every play writes to IndexedDB during playback. Check it 
 
 Exit criterion: standard check passes. Play a song past the threshold and it moves to the top of Recently played. Like it and it shows in Liked songs after a reload.
 
-## Wave 2: album, playlist and queue actions
+## Wave 2: album, playlist and queue actions [done 2026-10-16]
 
 Goal: act on a whole album, playlist or queue at once.
 

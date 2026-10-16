@@ -246,6 +246,7 @@ export default function App() {
             // The origin's entry sits right behind this one, so Back keeps history linear.
             onBack={() => (view.from ? history.back() : navigate({ kind: "albums" }))}
             onMore={(t) => openMenu(t, { kind: "library" })}
+            onToast={showToast}
           />
         ) : view.kind === "artists" ? (
           <Artists onOpen={(key) => navigate({ kind: "artist", key })} onAdd={() => navigate({ kind: "add" })} />
@@ -260,7 +261,7 @@ export default function App() {
         ) : view.kind === "playlists" ? (
           <Playlists onOpen={(id) => navigate({ kind: "playlist", id })} onOpenLiked={() => navigate({ kind: "liked" })} />
         ) : view.kind === "liked" ? (
-          <LikedPage onBack={() => navigate({ kind: "playlists" })} onMore={(t) => openMenu(t, { kind: "library" })} />
+          <LikedPage onBack={() => navigate({ kind: "playlists" })} onMore={(t) => openMenu(t, { kind: "library" })} onToast={showToast} />
         ) : view.kind === "playlist" ? (
           <PlaylistPage
             key={view.id}
@@ -270,7 +271,7 @@ export default function App() {
             onToast={showToast}
           />
         ) : view.kind === "queue" ? (
-          <Queue onMore={(t, pos) => openMenu(t, { kind: "queue", pos })} />
+          <Queue onMore={(t, pos) => openMenu(t, { kind: "queue", pos })} onToast={showToast} />
         ) : (
           <AddMusic />
         )}

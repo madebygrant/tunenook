@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { moved, newPlaylist, renamed, withoutIndex, withoutTracks, withTracks } from "./playlists";
+import { missingFrom, moved, newPlaylist, renamed, withoutIndex, withoutTracks, withTracks } from "./playlists";
 
 const base = newPlaylist("p", "  Road trip ", ["a", "b", "c"], 1);
 
@@ -28,5 +28,10 @@ describe("playlists", () => {
     expect(moved(base, 0, 2, 2).trackIds).toEqual(["b", "c", "a"]);
     expect(moved(base, 2, 0, 2).trackIds).toEqual(["c", "a", "b"]);
     expect(moved(base, 0, 5, 2)).toBe(base);
+  });
+
+  it("lists the songs a playlist doesn't have yet, keeping their order and repeats", () => {
+    expect(missingFrom(base, ["d", "a", "e", "d"])).toEqual(["d", "e", "d"]);
+    expect(missingFrom(base, ["a", "b"])).toEqual([]);
   });
 });
