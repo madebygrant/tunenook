@@ -297,6 +297,7 @@ export function initPlayer(): void {
     save();
   });
   a.addEventListener("seeked", () => publishPosition(a));
+  a.addEventListener("volumechange", emit);
   a.addEventListener("ended", onEnded);
   a.addEventListener("error", onError);
 
@@ -417,6 +418,10 @@ export function seekBy(seconds: number): void {
   if (audio) seek(audio.currentTime + seconds);
 }
 
+export function toggleMute(): void {
+  if (audio) audio.muted = !audio.muted;
+}
+
 export function toggleShuffle(): void {
   setQueue(toggleShuffleQueue(queue));
   prefetch();
@@ -459,6 +464,14 @@ export function useNowPlaying(): NowPlaying {
 
 export function usePosition(): number {
   return useSyncExternalStore(subscribe, () => position);
+}
+
+export function isMuted(): boolean {
+  return audio?.muted ?? false;
+}
+
+export function useMuted(): boolean {
+  return useSyncExternalStore(subscribe, isMuted);
 }
 
 export function useDuration(): number {

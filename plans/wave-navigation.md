@@ -19,7 +19,7 @@ Risk: changes visible behaviour. The URL now shows a hash, and a page reload sta
 
 Exit criterion: standard check passes. In Chrome with the Android emulation, open an album, open a song menu, then press Back twice. The menu closes, then the album list shows. A third Back from the first view leaves the app.
 
-## Wave 2: keyboard gaps
+## Wave 2: keyboard gaps [done 2026-10-16]
 
 Goal: slash focuses search and M mutes.
 

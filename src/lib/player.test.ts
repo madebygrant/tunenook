@@ -104,4 +104,13 @@ describe("player", () => {
     // The silent unlock clip, "a" and the prefetched "b".
     expect(URL.createObjectURL).toHaveBeenCalledTimes(3);
   });
+
+  it("toggles mute on the audio element", async () => {
+    const { player, audio } = await setup(["a"]);
+    player.toggleMute();
+    expect(audio.muted).toBe(true);
+    expect(player.isMuted()).toBe(true);
+    player.toggleMute();
+    expect(player.isMuted()).toBe(false);
+  });
 });

@@ -11,6 +11,7 @@ import { Sidebar, type View } from "./components/Sidebar";
 import { SongMenu, type MenuTarget } from "./components/SongMenu";
 import { Songs } from "./components/Songs";
 import { Button } from "./components/ui";
+import { isShortcut } from "./lib/keys";
 import { onViewPop, pushView, startHistory, viewFromHash, viewHash } from "./lib/history";
 import { getTracks, onStorageError, useAlbums, useLibraryLoaded, useLoadError, usePlaylists, useTrackMap } from "./lib/library";
 import { useNowPlaying } from "./lib/player";
@@ -75,9 +76,14 @@ export default function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "?" || e.metaKey || e.ctrlKey || e.altKey || document.querySelector(".dialog")) return;
-      if (e.target instanceof Element && e.target.closest("input, textarea, select, [contenteditable]")) return;
-      setShortcutsOpen(true);
+      if ((e.key !== "?" && e.key !== "/") || !isShortcut(e)) return;
+      if (e.key === "?") return setShortcutsOpen(true);
+      const search = main.current?.querySelector<HTMLInputElement>('input[type="search"]');
+      // The open nav drawer makes the page inert, so its search can't take focus.
+      if (!search || search.closest("[inert]")) return;
+      // Stops the slash being typed into the field, and Firefox's quick find.
+      e.preventDefault();
+      search.focus();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

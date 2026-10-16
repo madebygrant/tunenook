@@ -12,12 +12,15 @@ import {
   seekBy,
   SEEK_SECONDS,
   toggle,
+  toggleMute,
   toggleShuffle,
   useDuration,
+  useMuted,
   useNowPlaying,
   usePosition,
   useQueue,
 } from "../lib/player";
+import { isShortcut } from "../lib/keys";
 import { idAt } from "../lib/queue";
 import { albumKey } from "../lib/tags";
 import { Dialog } from "./Dialog";
@@ -41,6 +44,14 @@ export function Player({ onNavigate }: { onNavigate: (view: View) => void }) {
   const byId = useTrackMap();
   const time = usePosition();
   const duration = useDuration();
+  const muted = useMuted();
+  // Announced only on a change, so the dock appearing doesn't say "Unmuted".
+  const [mutedNotice, setMutedNotice] = useState("");
+  const [shownMuted, setShownMuted] = useState(muted);
+  if (shownMuted !== muted) {
+    setShownMuted(muted);
+    setMutedNotice(muted ? "Muted" : "Unmuted");
+  }
   const [expanded, setExpanded] = useState(false);
   const [collapsed, setCollapsed] = useState(loadCollapsed);
   const track = now.id ? byId.get(now.id) : undefined;
@@ -48,20 +59,20 @@ export function Player({ onNavigate }: { onNavigate: (view: View) => void }) {
   const canNext = hasNext(queue);
   const upNext = canNext ? byId.get(idAt(queue, (queue.at + 1) % queue.order.length)) : undefined;
 
-  // Space and the arrow keys are left alone on controls, which already act on them.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
-      const target = e.target;
-      if (target instanceof Element && target.closest("input, textarea, select, button, a, [contenteditable]")) return;
+      if (!isShortcut(e, { skipControls: true, allowInPlayerSheet: true })) return;
       const key = e.key.toLowerCase();
-      if (e.code === "Space") toggle();
+      // Held toggles would flip on every auto-repeat; seeking and skipping may repeat.
+      const once = (action: () => void) => !e.repeat && action();
+      if (e.code === "Space") once(toggle);
       else if (e.key === "ArrowLeft") seekBy(-SEEK_SECONDS);
       else if (e.key === "ArrowRight") seekBy(SEEK_SECONDS);
       else if (key === "n") next();
       else if (key === "p") previous();
-      else if (key === "s") toggleShuffle();
-      else if (key === "r") cycleRepeat();
+      else if (key === "s") once(toggleShuffle);
+      else if (key === "r") once(cycleRepeat);
+      else if (key === "m") once(toggleMute);
       else return;
       e.preventDefault();
     };
@@ -168,10 +179,17 @@ export function Player({ onNavigate }: { onNavigate: (view: View) => void }) {
   return (
     <div className={`xh-player${collapsed ? " is-collapsed" : ""}`} role="region" aria-label="Player">
       <CoverArt artId={track.artId} title={track.album || track.title} size={56} />
-      <button className="meta" aria-label={`Open player: ${track.title}, ${track.artist}`} onClick={() => setExpanded(true)}>
+      <button
+        className="meta"
+        aria-label={`Open player: ${track.title}, ${track.artist}${muted ? ", muted" : ""}`}
+        onClick={() => setExpanded(true)}
+      >
         <span className="ttl">{track.title}</span>
-        <span className="show">{now.blocked ? "Tap play to start" : track.artist}</span>
+        <span className="show">{now.blocked ? "Tap play to start" : muted ? `Muted · ${track.artist}` : track.artist}</span>
       </button>
+      <span className="sr-only" role="status">
+        {mutedNotice}
+      </span>
       {transport}
       {seekRow(true)}
       {modes}
@@ -185,6 +203,7 @@ export function Player({ onNavigate }: { onNavigate: (view: View) => void }) {
           </button>
           <CoverArt artId={track.artId} title={track.album || track.title} size={240} />
           <div className="sheet-title">{track.title}</div>
+          {muted && <div className="muted">Muted. Press M to unmute.</div>}
           {albumView ? (
             <button
               className="show-link"
