@@ -1,0 +1,250 @@
+import { flushSync } from "react-dom";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { AddMusic } from "./components/AddMusic";
+import { AlbumPage, Albums } from "./components/Albums";
+import { BrandMark, MenuIcon, RefreshIcon, UndoIcon } from "./components/icons";
+import { Player } from "./components/Player";
+import { PlaylistPage, Playlists } from "./components/Playlists";
+import { Queue } from "./components/Queue";
+import { Shortcuts } from "./components/Shortcuts";
+import { Sidebar, type View } from "./components/Sidebar";
+import { SongMenu, type MenuTarget } from "./components/SongMenu";
+import { Songs } from "./components/Songs";
+import { Button } from "./components/ui";
+import { getTracks, useAlbums, useLibraryLoaded, usePlaylists, useTrackMap } from "./lib/library";
+import { useNowPlaying } from "./lib/player";
+import { applyUpdate, useReloadPending, useUpdateReady } from "./lib/pwa";
+import type { Track } from "./lib/types";
+import { useMediaQuery } from "./lib/useMediaQuery";
+
+const TOAST_MS = 8000;
+
+interface Toast {
+  message: string;
+  action?: { label: string; icon?: ReactNode; run: () => void };
+}
+
+export default function App() {
+  const loaded = useLibraryLoaded();
+  const byId = useTrackMap();
+  const albums = useAlbums();
+  const playlists = usePlaylists();
+  const now = useNowPlaying();
+  // Decided once at launch, so the first import doesn't move the page away from its own progress.
+  const [view, setView] = useState<View>(() => (getTracks().length === 0 ? { kind: "add" } : { kind: "songs" }));
+  const [navOpen, setNavOpen] = useState(false);
+  const [menu, setMenu] = useState<MenuTarget | null>(null);
+  const [toast, setToast] = useState<Toast | null>(null);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const updateReady = useUpdateReady();
+  const reloadPending = useReloadPending();
+  const main = useRef<HTMLElement>(null);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const navigated = useRef(false);
+  const drawer = useMediaQuery("(max-width: 959px)");
+  const nowTrack = now.id ? byId.get(now.id) : undefined;
+  const hasDock = nowTrack !== undefined;
+
+
+  useEffect(() => {
+    main.current?.scrollTo(0, 0);
+    // Moving focus to the heading announces the new view; the first render keeps the browser default.
+    if (navigated.current) main.current?.querySelector("h1")?.focus({ preventScroll: true });
+  }, [view]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), TOAST_MS);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "?" || e.metaKey || e.ctrlKey || e.altKey || document.querySelector(".dialog")) return;
+      if (e.target instanceof Element && e.target.closest("input, textarea, select, [contenteditable]")) return;
+      setShortcutsOpen(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  useEffect(() => {
+    const dock = document.querySelector(".player-dock");
+    if (!dock) return;
+    const root = document.documentElement.style;
+    const observer = new ResizeObserver(() => root.setProperty("--dock-h", `${dock.getBoundingClientRect().height}px`));
+    observer.observe(dock);
+    return () => {
+      observer.disconnect();
+      root.removeProperty("--dock-h");
+    };
+  }, [hasDock]);
+
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    // iOS leaves the page panned up after the keyboard closes, pushing the dock off screen.
+    const reset = () => {
+      if (vv.height >= window.innerHeight - 1 && (window.scrollY || vv.offsetTop)) window.scrollTo(0, 0);
+    };
+    vv.addEventListener("resize", reset);
+    vv.addEventListener("scroll", reset);
+    return () => {
+      vv.removeEventListener("resize", reset);
+      vv.removeEventListener("scroll", reset);
+    };
+  }, []);
+
+  const pageTitle =
+    view.kind === "album"
+      ? (albums.find((a) => a.key === view.key)?.title ?? "Album")
+      : view.kind === "playlist"
+        ? (playlists.find((p) => p.id === view.id)?.name ?? "Playlist")
+        : { songs: "Songs", albums: "Albums", playlists: "Playlists", queue: "Queue", add: "Add music" }[view.kind];
+  const nowPlayingTitle = now.playing ? nowTrack?.title : undefined;
+
+  useEffect(() => {
+    document.title = nowPlayingTitle ? `▶ ${nowPlayingTitle} · TuneNook` : `${pageTitle} · TuneNook`;
+  }, [pageTitle, nowPlayingTitle]);
+
+  // The new service worker has taken over; reload once nothing is playing so a song is never cut off.
+  useEffect(() => {
+    if (reloadPending && !now.playing) location.reload();
+  }, [reloadPending, now.playing]);
+
+  const closeNav = useCallback(() => {
+    // The menu button is inert while the drawer is open, so un-inert it before focusing.
+    flushSync(() => setNavOpen(false));
+    menuButton.current?.focus();
+  }, []);
+
+  const navigate = useCallback((next: View) => {
+    navigated.current = true;
+    setView(next);
+    setNavOpen(false);
+  }, []);
+
+  const showToast = useCallback((message: string, undo?: () => void) => {
+    setToast({ message, action: undo && { label: "Undo", icon: <UndoIcon />, run: undo } });
+  }, []);
+
+  const openMenu = useCallback((track: Track, context: MenuTarget["context"]) => setMenu({ track, context }), []);
+
+  const covered = navOpen && drawer;
+  const notice: Toast | null =
+    toast ??
+    (updateReady && !now.playing
+      ? { message: "TuneNook has an update.", action: { label: "Reload", icon: <RefreshIcon />, run: applyUpdate } }
+      : null);
+
+  return (
+    <div className={`app xh${navOpen ? " nav-open" : ""}`}>
+      <div className="skip-links" inert={covered}>
+        <a
+          href="#main"
+          onClick={(e) => {
+            e.preventDefault();
+            main.current?.focus();
+          }}
+        >
+          Skip to content
+        </a>
+        {nowTrack && (
+          <a
+            href="#player"
+            onClick={(e) => {
+              e.preventDefault();
+              document.querySelector<HTMLElement>(".player-dock .xh-play")?.focus();
+            }}
+          >
+            Skip to player
+          </a>
+        )}
+      </div>
+      <header className="topbar" inert={covered}>
+        <button
+          ref={menuButton}
+          className="menu-btn"
+          aria-label="Open menu"
+          aria-expanded={navOpen}
+          aria-controls="sidebar"
+          onClick={() => setNavOpen(true)}
+        >
+          <MenuIcon />
+        </button>
+        <div className="brand">
+          <BrandMark className="brand-mark" />
+          <span>TuneNook</span>
+        </div>
+      </header>
+
+      <Sidebar
+        view={view}
+        onNavigate={navigate}
+        drawer={drawer}
+        open={navOpen}
+        onClose={closeNav}
+        onShortcuts={() => setShortcutsOpen(true)}
+      />
+      <button className="scrim" aria-hidden="true" tabIndex={-1} onClick={closeNav} />
+
+      <main id="main" className="main" ref={main} tabIndex={-1} inert={covered}>
+        {!loaded ? null : view.kind === "songs" ? (
+          <Songs onMore={(t) => openMenu(t, { kind: "library" })} onAdd={() => navigate({ kind: "add" })} />
+        ) : view.kind === "albums" ? (
+          <Albums onOpen={(key) => navigate({ kind: "album", key })} onAdd={() => navigate({ kind: "add" })} />
+        ) : view.kind === "album" ? (
+          <AlbumPage
+            key={view.key}
+            albumKey={view.key}
+            onBack={() => navigate({ kind: "albums" })}
+            onMore={(t) => openMenu(t, { kind: "library" })}
+          />
+        ) : view.kind === "playlists" ? (
+          <Playlists onOpen={(id) => navigate({ kind: "playlist", id })} />
+        ) : view.kind === "playlist" ? (
+          <PlaylistPage
+            key={view.id}
+            id={view.id}
+            onBack={() => navigate({ kind: "playlists" })}
+            onMore={(t, index) => openMenu(t, { kind: "playlist", playlistId: view.id, index })}
+            onToast={showToast}
+          />
+        ) : view.kind === "queue" ? (
+          <Queue onMore={(t, pos) => openMenu(t, { kind: "queue", pos })} />
+        ) : (
+          <AddMusic />
+        )}
+      </main>
+
+      <div className="toast-host" role="status">
+        {notice && (
+          <div className="toast">
+            <span>{notice.message}</span>
+            {notice.action && (
+              <Button
+                variant="secondary"
+                small
+                icon={notice.action.icon}
+                onClick={() => {
+                  notice.action?.run();
+                  setToast(null);
+                }}
+              >
+                {notice.action.label}
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+      {menu && <SongMenu target={menu} onClose={() => setMenu(null)} onNavigate={navigate} onToast={showToast} />}
+      {shortcutsOpen && <Shortcuts onClose={() => setShortcutsOpen(false)} />}
+
+      {nowTrack && (
+        <div className="player-dock" id="player">
+          <Player onNavigate={navigate} />
+        </div>
+      )}
+    </div>
+  );
+}

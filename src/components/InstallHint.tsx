@@ -1,0 +1,40 @@
+import { useState } from "react";
+import { canAddToHomeScreen, useStandalone } from "../lib/standalone";
+import { CloseIcon } from "./icons";
+import { Button } from "./ui";
+
+const DISMISSED_KEY = "tunenook.installHintDismissed";
+
+function wasDismissed(): boolean {
+  try {
+    return localStorage.getItem(DISMISSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function InstallHint() {
+  const standalone = useStandalone();
+  const [canInstall] = useState(() => canAddToHomeScreen());
+  const [dismissed, setDismissed] = useState(wasDismissed);
+  if (!canInstall || standalone || dismissed) return null;
+
+  function dismiss() {
+    try {
+      localStorage.setItem(DISMISSED_KEY, "1");
+    } catch {
+      // Storage blocked: hidden until reload.
+    }
+    setDismissed(true);
+  }
+
+  return (
+    <aside className="xh-panel install-hint" aria-label="Install TuneNook">
+      <p>
+        Add TuneNook to your Home Screen from Safari's Share menu (it may be under ···) before adding music. The installed app
+        has its own storage, so songs added here in Safari won't be there.
+      </p>
+      <Button variant="ghost" small icon={<CloseIcon />} aria-label="Dismiss" onClick={dismiss} />
+    </aside>
+  );
+}

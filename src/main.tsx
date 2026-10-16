@@ -1,0 +1,29 @@
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import '@fontsource/syne/latin-400.css'
+import '@fontsource/syne/latin-500.css'
+import '@fontsource/figtree/latin-300.css'
+import '@fontsource/figtree/latin-400.css'
+import '@fontsource/figtree/latin-500.css'
+import '@fontsource/geist-mono/latin-400.css'
+import '@fontsource/geist-mono/latin-500.css'
+import './styles/app.css'
+import App from './App.tsx'
+import { checkAllAccess } from './lib/folders'
+import { loadLibrary } from './lib/library'
+import { initPlayer, restoreQueue } from './lib/player'
+import { registerServiceWorker } from './lib/pwa'
+
+registerServiceWorker()
+initPlayer()
+// The library loads before the first render so the app opens on the right page.
+void loadLibrary()
+  .then(() => Promise.all([restoreQueue(), checkAllAccess()]))
+  .catch((e: unknown) => console.error('Library failed to load', e))
+  .finally(() =>
+    createRoot(document.getElementById('root')!).render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
+    ),
+  )
