@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useCloseOnBack } from "../lib/history";
 
 const FOCUSABLE = "button:not([disabled]), a[href], input:not([disabled]), [tabindex]:not([tabindex='-1'])";
 
@@ -13,11 +14,7 @@ interface Props {
 // Rendered outside .app so the whole app can go inert while it is open.
 export function Dialog({ label, onClose, className, children }: Props) {
   const box = useRef<HTMLDivElement>(null);
-  const close = useRef(onClose);
-
-  useEffect(() => {
-    close.current = onClose;
-  });
+  const close = useCloseOnBack(onClose);
 
   useEffect(() => {
     const app = document.querySelector<HTMLElement>(".app");
@@ -47,7 +44,7 @@ export function Dialog({ label, onClose, className, children }: Props) {
       if (app) app.inert = false;
       opener?.focus();
     };
-  }, []);
+  }, [close]);
 
   return createPortal(
     <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from "react";
+import { useCloseOnBack } from "../lib/history";
 import { AddMusicIcon, AlbumIcon, BrandMark, CloseIcon, PlaylistIcon, QueueIcon, SongsIcon } from "./icons";
 
 export type View =
@@ -33,12 +34,14 @@ const ITEMS: { kind: View["kind"]; label: string; icon: ReactNode; also?: View["
 export function Sidebar({ view, onNavigate, drawer, open, onClose, onShortcuts }: Props) {
   const nav = useRef<HTMLElement>(null);
   const modal = drawer && open;
+  useCloseOnBack(onClose, modal);
 
   useEffect(() => {
     if (!modal) return;
     nav.current?.querySelector<HTMLElement>(".nav-close")?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") return onClose();
+      // A sheet opened from the drawer handles its own Escape.
+      if (e.key === "Escape") return document.querySelector(".dialog") ? undefined : onClose();
       if (e.key !== "Tab" || !nav.current) return;
       // The player dock stays usable with the drawer open, so it is part of the trap.
       const dock = document.querySelectorAll<HTMLElement>(DOCK_FOCUSABLE);

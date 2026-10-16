@@ -11,6 +11,7 @@ import { Sidebar, type View } from "./components/Sidebar";
 import { SongMenu, type MenuTarget } from "./components/SongMenu";
 import { Songs } from "./components/Songs";
 import { Button } from "./components/ui";
+import { onViewPop, pushView, startHistory, viewFromHash, viewHash } from "./lib/history";
 import { getTracks, onStorageError, useAlbums, useLibraryLoaded, useLoadError, usePlaylists, useTrackMap } from "./lib/library";
 import { useNowPlaying } from "./lib/player";
 import { applyUpdate, useReloadPending, useUpdateReady } from "./lib/pwa";
@@ -32,7 +33,10 @@ export default function App() {
   const playlists = usePlaylists();
   const now = useNowPlaying();
   // Decided once at launch, so the first import doesn't move the page away from its own progress.
-  const [view, setView] = useState<View>(() => (getTracks().length === 0 ? { kind: "add" } : { kind: "songs" }));
+  const [initialView] = useState<View>(() =>
+    getTracks().length === 0 ? { kind: "add" } : (viewFromHash(location.hash) ?? { kind: "songs" }),
+  );
+  const [view, setView] = useState(initialView);
   const [navOpen, setNavOpen] = useState(false);
   const [menu, setMenu] = useState<MenuTarget | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
@@ -52,6 +56,14 @@ export default function App() {
     // Moving focus to the heading announces the new view; the first render keeps the browser default.
     if (navigated.current) main.current?.querySelector("h1")?.focus({ preventScroll: true });
   }, [view]);
+
+  useEffect(() => {
+    startHistory(initialView);
+    return onViewPop((next) => {
+      navigated.current = true;
+      setView((prev) => (viewHash(prev) === viewHash(next) ? prev : next));
+    });
+  }, [initialView]);
 
   useEffect(() => onStorageError((message) => setToast({ message })), []);
 
@@ -123,6 +135,7 @@ export default function App() {
 
   const navigate = useCallback((next: View) => {
     navigated.current = true;
+    pushView(next);
     setView(next);
     setNavOpen(false);
   }, []);
