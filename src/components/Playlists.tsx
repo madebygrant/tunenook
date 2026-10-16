@@ -34,6 +34,7 @@ export function Playlists({ onOpen }: { onOpen: (id: string) => void }) {
           e.preventDefault();
           if (!name.trim()) return;
           const p = await createPlaylist(name);
+          if (!p) return;
           setName("");
           onOpen(p.id);
         }}

@@ -13,10 +13,26 @@ export interface ImportSummary {
   failed: string[];
   playlists: number;
   missingEntries: number;
+  outOfSpace: boolean;
+  addedIds: string[];
 }
 
 export function emptySummary(): ImportSummary {
-  return { added: 0, duplicates: 0, untagged: 0, unplayable: [], failed: [], playlists: 0, missingEntries: 0 };
+  return {
+    added: 0,
+    duplicates: 0,
+    untagged: 0,
+    unplayable: [],
+    failed: [],
+    playlists: 0,
+    missingEntries: 0,
+    outOfSpace: false,
+    addedIds: [],
+  };
+}
+
+function trackPath(t: Track): string {
+  return t.source.kind === "linked" ? t.source.path : (t.path ?? t.fileName);
 }
 
 export interface Progress {
@@ -84,7 +100,8 @@ export async function readTrack(file: File, source: TrackSource, pendingArt: Set
   const c = meta?.common;
   const artist = c?.artist?.trim() || c?.artists?.[0]?.trim() || guess.artist || "Unknown artist";
   const album = c?.album?.trim() ?? "";
-  const albumArtist = c?.albumartist?.trim() || artist;
+  // Compilations without an album artist would otherwise split into one album per track artist.
+  const albumArtist = c?.albumartist?.trim() || (c?.compilation ? "Various artists" : artist);
   const id = crypto.randomUUID();
   const artId = album ? `album:${albumKey(albumArtist, album)}` : `track:${id}`;
 
@@ -115,6 +132,7 @@ export async function readTrack(file: File, source: TrackSource, pendingArt: Set
       duration: duration && Number.isFinite(duration) ? Math.round(duration) : null,
       artId: art || known ? artId : null,
       fileName: file.name,
+      path: source.kind === "linked" ? source.path : file.webkitRelativePath || file.name,
       size: file.size,
       type: audioType(file),
       addedAt: Date.now(),
@@ -154,12 +172,16 @@ export async function importItems(
       await addTrack({ track: read.track, art: read.art, file: source.kind === "copied" ? file : undefined });
       known.add(key);
       summary.added++;
+      summary.addedIds.push(read.track.id);
       if (!read.tagged) summary.untagged++;
       if (mayNotPlay(read.track.type)) summary.unplayable.push(file.name);
     } catch (e) {
       summary.failed.push(file.name);
       // Out of space: every later file would fail the same way.
-      if (e instanceof DOMException && e.name === "QuotaExceededError") break;
+      if (e instanceof DOMException && e.name === "QuotaExceededError") {
+        summary.outOfSpace = true;
+        break;
+      }
     }
   }
   onProgress({ done, total: items.length, current: "" });
@@ -168,12 +190,13 @@ export async function importItems(
 }
 
 export async function importPlaylists(files: File[], summary: ImportSummary): Promise<void> {
+  const fresh = new Set(summary.addedIds);
+  const candidates = getTracks().map((t) => ({ id: t.id, path: trackPath(t), fresh: fresh.has(t.id) }));
   for (const file of files) {
-    const { ids, missing } = matchEntries(m3uEntries(await file.text()), getTracks());
+    const { ids, missing } = matchEntries(m3uEntries(await file.text()), candidates);
     summary.missingEntries += missing;
     if (ids.length === 0) continue;
-    await createPlaylist(playlistName(file.name), ids);
-    summary.playlists++;
+    if (await createPlaylist(playlistName(file.name), ids)) summary.playlists++;
   }
 }
 

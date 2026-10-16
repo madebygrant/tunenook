@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { canLinkFolders, copyIntoLibrary, NeedsAccessError, requestAccess } from "../lib/folders";
-import { addToPlaylist, createPlaylist, getPlaylists, removeTracks, savePlaylist, usePlaylists } from "../lib/library";
+import { addToPlaylist, createPlaylist, getPlaylists, removeTracksSafely, savePlaylist, usePlaylists } from "../lib/library";
 import { addToQueue, playNext, removeFromQueue } from "../lib/player";
 import { moved, withoutIndex } from "../lib/playlists";
 import { albumKey } from "../lib/tags";
@@ -120,7 +120,7 @@ export function SongMenu({ target, onClose, onNavigate, onToast }: Props) {
               : "This deletes TuneNook's copy of the song and removes it from every playlist. The original file isn't touched."
           }
           action="Remove song"
-          onConfirm={() => run(() => void removeTracks(new Set([track.id])), `Removed ${track.title}.`)}
+          onConfirm={() => run(() => void removeTracksSafely(new Set([track.id])), `Removed ${track.title}.`)}
           onCancel={() => setStep("actions")}
         />
       )}

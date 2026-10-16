@@ -13,6 +13,7 @@ export function describeImport(s: ImportSummary): string {
   if (s.missingEntries) parts.push(`${plural(s.missingEntries, "playlist entry", "playlist entries")} didn't match a song.`);
   if (s.untagged) parts.push(`${plural(s.untagged, "song")} had no tags, so names come from the file names.`);
   if (s.unplayable.length) parts.push(`May not play on this device: ${names(s.unplayable)}.`);
-  if (s.failed.length) parts.push(`Couldn't add ${names(s.failed)}.`);
+  if (s.outOfSpace) parts.push("Stopped: this device is out of space.");
+  else if (s.failed.length) parts.push(`Couldn't add ${names(s.failed)}.`);
   return parts.join(" ");
 }

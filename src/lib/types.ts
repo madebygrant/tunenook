@@ -12,6 +12,8 @@ export interface Track {
   duration: number | null;
   artId: string | null;
   fileName: string;
+  // Path within the picked folder, used to match .m3u entries; just the file name for single-file picks.
+  path?: string;
   size: number;
   type: string;
   addedAt: number;

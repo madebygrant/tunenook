@@ -9,6 +9,7 @@ import {
   cycleRepeat as cycleRepeatQueue,
   EMPTY_QUEUE,
   idAt,
+  isValidQueue,
   jump,
   nextAt,
   playNext as playNextQueue,
@@ -51,6 +52,7 @@ let skips = 0;
 let wantPlay = false;
 let silentUrl: string | null = null;
 const urls = new Map<string, string>();
+const pending = new Map<string, Promise<string>>();
 const { emit, subscribe } = createListeners();
 let save: () => void = () => {};
 
@@ -97,12 +99,22 @@ async function blobFor(id: string): Promise<Blob> {
   return blob;
 }
 
-async function prepare(id: string): Promise<string> {
+// Shares an in-flight load, so a prefetch and a tap on the same song make one object URL, not two.
+function prepare(id: string): Promise<string> {
   const cached = urls.get(id);
-  if (cached) return cached;
-  const url = URL.createObjectURL(await blobFor(id));
-  urls.set(id, url);
-  return url;
+  if (cached) return Promise.resolve(cached);
+  let loading = pending.get(id);
+  if (!loading) {
+    loading = blobFor(id)
+      .then((blob) => {
+        const url = URL.createObjectURL(blob);
+        urls.set(id, url);
+        return url;
+      })
+      .finally(() => pending.delete(id));
+    pending.set(id, loading);
+  }
+  return loading;
 }
 
 function neighbours(): Set<string> {
@@ -176,8 +188,11 @@ function load(autoplay: boolean, startAt = 0): void {
     (e: unknown) => {
       if (token !== loadToken) return;
       loadedId = id;
-      setNow({ id, playing: false, failure: e instanceof NeedsAccessError ? { kind: "access", folderId: e.folderId } : { kind: "error" } });
+      const needsAccess = e instanceof NeedsAccessError;
+      setNow({ id, playing: false, failure: needsAccess ? { kind: "access", folderId: e.folderId } : { kind: "error" } });
       void publishMetadata(id);
+      // Skipping can't fix missing folder access; every later linked song would fail the same way.
+      if (autoplay && !needsAccess) skipAfterFailure();
     },
   );
 }
@@ -222,13 +237,17 @@ function onEnded(): void {
   advance(true);
 }
 
+// Moves past a broken or missing file mid-queue, but gives up after a few so a bad batch doesn't spin.
+function skipAfterFailure(): void {
+  if (skips >= MAX_SKIPS || nextAt(queue, false) === null) return;
+  skips++;
+  advance(false);
+}
+
 function onError(): void {
   if (!audio || audio.src === silentUrl || !loadedId) return;
   setNow({ playing: false, failure: { kind: "error" } });
-  // Skips a broken file mid-queue, but gives up after a few so a bad batch doesn't spin.
-  if (!wantPlay || skips >= MAX_SKIPS) return;
-  skips++;
-  if (nextAt(queue, false) !== null) advance(false);
+  if (wantPlay) skipAfterFailure();
 }
 
 export function initPlayer(): void {
@@ -299,13 +318,14 @@ export function initPlayer(): void {
 // Called after the library loads; the restored song waits paused at its last position.
 export function restoreQueue(): void {
   try {
-    const saved = JSON.parse(localStorage.getItem(SAVE_KEY) ?? "null") as { queue: Queue; position: number } | null;
-    if (!saved?.queue?.ids?.length) return;
+    const saved = JSON.parse(localStorage.getItem(SAVE_KEY) ?? "null") as { queue?: unknown; position?: unknown } | null;
+    if (!saved || !isValidQueue(saved.queue) || saved.queue.ids.length === 0) return;
     const missing = new Set(saved.queue.ids.filter((id) => !getTrack(id)));
     const { queue: restored } = removeIds(saved.queue, missing);
     queue = restored;
     emit();
-    load(false, missing.size ? 0 : saved.position);
+    const position = typeof saved.position === "number" && Number.isFinite(saved.position) ? saved.position : 0;
+    load(false, missing.size ? 0 : position);
   } catch {
     // Unreadable save: start with an empty queue.
   }
@@ -410,6 +430,7 @@ export function cycleRepeat(): void {
 export function retry(): void {
   const id = currentId(queue);
   if (!id) return;
+  skips = 0;
   const url = urls.get(id);
   if (url) URL.revokeObjectURL(url);
   urls.delete(id);
@@ -418,6 +439,14 @@ export function retry(): void {
 
 export function hasNext(q: Queue): boolean {
   return nextAt(q, false) !== null;
+}
+
+export function getQueue(): Queue {
+  return queue;
+}
+
+export function getNowPlaying(): NowPlaying {
+  return now;
 }
 
 export function useQueue(): Queue {

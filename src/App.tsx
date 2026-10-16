@@ -11,7 +11,7 @@ import { Sidebar, type View } from "./components/Sidebar";
 import { SongMenu, type MenuTarget } from "./components/SongMenu";
 import { Songs } from "./components/Songs";
 import { Button } from "./components/ui";
-import { getTracks, useAlbums, useLibraryLoaded, usePlaylists, useTrackMap } from "./lib/library";
+import { getTracks, onStorageError, useAlbums, useLibraryLoaded, useLoadError, usePlaylists, useTrackMap } from "./lib/library";
 import { useNowPlaying } from "./lib/player";
 import { applyUpdate, useReloadPending, useUpdateReady } from "./lib/pwa";
 import type { Track } from "./lib/types";
@@ -26,6 +26,7 @@ interface Toast {
 
 export default function App() {
   const loaded = useLibraryLoaded();
+  const loadError = useLoadError();
   const byId = useTrackMap();
   const albums = useAlbums();
   const playlists = usePlaylists();
@@ -51,6 +52,8 @@ export default function App() {
     // Moving focus to the heading announces the new view; the first render keeps the browser default.
     if (navigated.current) main.current?.querySelector("h1")?.focus({ preventScroll: true });
   }, [view]);
+
+  useEffect(() => onStorageError((message) => setToast({ message })), []);
 
   useEffect(() => {
     if (!toast) return;
@@ -189,7 +192,22 @@ export default function App() {
       <button className="scrim" aria-hidden="true" tabIndex={-1} onClick={closeNav} />
 
       <main id="main" className="main" ref={main} tabIndex={-1} inert={covered}>
-        {!loaded ? null : view.kind === "songs" ? (
+        {loadError ? (
+          <section aria-labelledby="storage-title">
+            <div className="empty">
+              <h2 id="storage-title" className="h3">
+                TuneNook can't open its storage
+              </h2>
+              <p className="muted">{loadError}</p>
+              <p className="muted">
+                Private browsing and blocked site data stop it from saving music. Check those settings, then reload.
+              </p>
+              <div className="head-actions">
+                <Button onClick={() => location.reload()}>Reload</Button>
+              </div>
+            </div>
+          </section>
+        ) : !loaded ? null : view.kind === "songs" ? (
           <Songs onMore={(t) => openMenu(t, { kind: "library" })} onAdd={() => navigate({ kind: "add" })} />
         ) : view.kind === "albums" ? (
           <Albums onOpen={(key) => navigate({ kind: "album", key })} onAdd={() => navigate({ kind: "add" })} />

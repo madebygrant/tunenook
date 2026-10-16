@@ -18,8 +18,23 @@ function open(): Promise<IDBDatabase> {
       // Directory handles from showDirectoryPicker; Chromium only, empty elsewhere.
       db.createObjectStore("folders", { keyPath: "id" });
     };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const db = req.result;
+      // A newer version opening in another tab must not be blocked by this one.
+      db.onversionchange = () => {
+        db.close();
+        opening = null;
+      };
+      resolve(db);
+    };
+    req.onerror = () => {
+      opening = null;
+      reject(req.error);
+    };
+    req.onblocked = () => {
+      opening = null;
+      reject(new Error("TuneNook is open in another tab with an older version. Close it and reload."));
+    };
   });
   return opening;
 }

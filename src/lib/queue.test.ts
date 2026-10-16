@@ -5,6 +5,7 @@ import {
   cycleRepeat,
   EMPTY_QUEUE,
   idAt,
+  isValidQueue,
   nextAt,
   playNext,
   prevAt,
@@ -90,6 +91,16 @@ describe("queue", () => {
     const { queue, currentRemoved } = removeIds(start(ids, 1, false, "off"), new Set(["b"]));
     expect(currentRemoved).toBe(true);
     expect(currentId(queue)).toBe("c");
+  });
+
+  it("accepts real queues and rejects corrupt saves", () => {
+    expect(isValidQueue(start(ids, 2, true, "all"))).toBe(true);
+    expect(isValidQueue(EMPTY_QUEUE)).toBe(true);
+    expect(isValidQueue(null)).toBe(false);
+    expect(isValidQueue({ ...start(ids, 0, false, "off"), order: [0, 1, 2, 9] })).toBe(false);
+    expect(isValidQueue({ ...start(ids, 0, false, "off"), order: [0, 0, 1, 2] })).toBe(false);
+    expect(isValidQueue({ ...start(ids, 0, false, "off"), at: 4 })).toBe(false);
+    expect(isValidQueue({ ...start(ids, 0, false, "off"), repeat: "sometimes" })).toBe(false);
   });
 
   it("keeps the list order for unshuffling after a removal", () => {

@@ -26,6 +26,18 @@ function range(n: number): number[] {
   return Array.from({ length: n }, (_, i) => i);
 }
 
+// Saved queues come back from localStorage, so check the shape before trusting the indices.
+export function isValidQueue(value: unknown): value is Queue {
+  if (!value || typeof value !== "object") return false;
+  const { ids, order, at, shuffle, repeat } = value as Record<string, unknown>;
+  if (!Array.isArray(ids) || !ids.every((id) => typeof id === "string")) return false;
+  const n = ids.length;
+  if (!Array.isArray(order) || order.length !== n || new Set(order).size !== n) return false;
+  if (!order.every((i) => Number.isInteger(i) && i >= 0 && i < n)) return false;
+  if (typeof at !== "number" || !Number.isInteger(at) || (n === 0 ? at !== 0 : at < 0 || at >= n)) return false;
+  return typeof shuffle === "boolean" && (repeat === "off" || repeat === "all" || repeat === "one");
+}
+
 export function currentId(q: Queue): string | null {
   return q.order.length ? q.ids[q.order[q.at]] : null;
 }

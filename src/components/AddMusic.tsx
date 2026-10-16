@@ -264,7 +264,10 @@ function FolderRow({ folder, busy }: { folder: LinkedFolder; busy: boolean }) {
             onCancel={() => setConfirming(false)}
             onConfirm={() => {
               setConfirming(false);
-              void unlinkFolder(folder.id);
+              void runJob(`Unlinking ${folder.name}`, async () => {
+                await unlinkFolder(folder.id);
+                return `Unlinked ${folder.name}.`;
+              });
             }}
           />
         </Dialog>
