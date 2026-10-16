@@ -4,7 +4,7 @@ import type { View } from "../components/Sidebar";
 const SONGS: View = { kind: "songs" };
 
 export function viewHash(view: View): string {
-  if (view.kind === "album") return `#/album/${encodeURIComponent(view.key)}`;
+  if (view.kind === "album" || view.kind === "artist") return `#/${view.kind}/${encodeURIComponent(view.key)}`;
   if (view.kind === "playlist") return `#/playlist/${encodeURIComponent(view.id)}`;
   return `#/${view.kind}`;
 }
@@ -14,7 +14,9 @@ export function viewFromHash(hash: string): View | null {
   if (!match) return null;
   const [, kind, arg] = match;
   if (arg === undefined) {
-    return kind === "songs" || kind === "albums" || kind === "playlists" || kind === "queue" || kind === "add" ? { kind } : null;
+    return kind === "songs" || kind === "albums" || kind === "artists" || kind === "playlists" || kind === "queue" || kind === "add"
+      ? { kind }
+      : null;
   }
   let value: string;
   try {
@@ -22,9 +24,21 @@ export function viewFromHash(hash: string): View | null {
   } catch {
     return null;
   }
-  if (kind === "album") return { kind, key: value };
+  if (kind === "album" || kind === "artist") return { kind, key: value };
   if (kind === "playlist") return { kind, id: value };
   return null;
+}
+
+// An album remembers the view it was opened from, so its back button can return there.
+function entryState(view: View): { from: string } | null {
+  return view.kind === "album" && view.from ? { from: viewHash(view.from) } : null;
+}
+
+export function currentView(): View | null {
+  const view = viewFromHash(location.hash);
+  const from = (history.state as { from?: unknown } | null)?.from;
+  const origin = typeof from === "string" ? viewFromHash(from) : null;
+  return view?.kind === "album" && origin ? { ...view, from: origin } : view;
 }
 
 // Each open sheet owns a same-URL history entry, so Back closes it.
@@ -91,7 +105,7 @@ function onPop(): void {
     .splice(layerDepth())
     .reverse()
     .forEach((layer) => layer.close());
-  const view = viewFromHash(location.hash);
+  const view = currentView();
   if (!view) history.replaceState(history.state, "", viewHash(SONGS));
   viewListeners.forEach((listener) => listener(view ?? SONGS));
   // Forward onto the entry of a sheet that has since closed steps straight back off it.
@@ -105,7 +119,7 @@ export function startHistory(view: View): void {
   listen();
   const depth = layerDepth();
   if (depth > 0) goBack(depth);
-  whenSettled(() => history.replaceState(null, "", viewHash(view)));
+  whenSettled(() => history.replaceState(entryState(view), "", viewHash(view)));
 }
 
 // Back and Forward between views; steps this module takes to close sheets aren't reported.
@@ -122,7 +136,7 @@ export function pushView(view: View): void {
     if (depth > 0) goBack(depth);
     whenSettled(() => {
       const hash = viewHash(view);
-      if (location.hash !== hash) history.pushState(null, "", hash);
+      if (location.hash !== hash) history.pushState(entryState(view), "", hash);
     });
   });
 }

@@ -1,9 +1,10 @@
 import { useSyncExternalStore } from "react";
 import { get, getAll, write, type Write } from "./db";
 import { newPlaylist, renamed, withoutTracks, withTracks } from "./playlists";
+import { compareText } from "./format";
 import { createListeners } from "./store";
 import { albumKey } from "./tags";
-import type { Album, LinkedFolder, Playlist, Track } from "./types";
+import type { Album, Artist, LinkedFolder, Playlist, Track } from "./types";
 
 // The live set of tracks. The arrays and maps handed to React are snapshots of it, rebuilt on publish.
 const store = new Map<string, Track>();
@@ -11,6 +12,8 @@ const artUsers = new Map<string, number>();
 let tracks: Track[] = [];
 let byId = new Map<string, Track>();
 let albums: Album[] = [];
+let artists: Artist[] = [];
+let artistKeys = new Set<string>();
 let dirty = false;
 let playlists: Playlist[] = [];
 let folders: LinkedFolder[] = [];
@@ -46,6 +49,8 @@ function publish(): void {
     tracks = [...store.values()];
     byId = new Map(store);
     albums = groupAlbums(tracks);
+    artists = groupArtists(albums);
+    artistKeys = new Set(artists.map((a) => a.key));
     dirty = false;
   }
   emit();
@@ -65,8 +70,9 @@ function reportError(message: string, e: unknown): void {
   errorListeners.forEach((listener) => listener(message));
 }
 
+// Untagged songs get an empty album name in the key, so they never merge with an album really called "Unknown album".
 export function trackAlbumKey(t: Pick<Track, "albumArtist" | "artist" | "album">): string {
-  return albumKey(t.albumArtist || t.artist, t.album || "Unknown album");
+  return albumKey(t.albumArtist || t.artist, t.album);
 }
 
 export function groupAlbums(list: Track[]): Album[] {
@@ -83,11 +89,59 @@ export function groupAlbums(list: Track[]): Album[] {
     album.year ??= t.year;
   }
   for (const album of groups.values()) album.tracks.sort(byDiscAndTrack);
-  return [...groups.values()].sort((a, b) => a.title.localeCompare(b.title));
+  return [...groups.values()].sort((a, b) => compareText(a.title, b.title) || compareText(a.artist, b.artist));
+}
+
+export function artistKey(name: string): string {
+  return name.toLowerCase();
+}
+
+export function artistPageFor(t: Pick<Track, "artist">): string | null {
+  const key = artistKey(t.artist);
+  return artistKeys.has(key) ? key : null;
+}
+
+// Albums belong to their album artist, so a compilation is one "Various artists" entry. Each song's own artist
+// also gets a page, listing the compilations they're on under appearsOn.
+export function groupArtists(albums: Album[]): Artist[] {
+  const groups = new Map<string, Artist>();
+  const artistFor = (name: string) => {
+    const key = artistKey(name);
+    let artist = groups.get(key);
+    if (!artist) {
+      artist = { key, name, artId: null, albums: [], appearsOn: [], songs: [], tracks: [] };
+      groups.set(key, artist);
+    }
+    return artist;
+  };
+  for (const album of albums) {
+    const owner = artistFor(album.artist);
+    // An album's tracks are either all untagged or all tagged, since untagged songs have their own key.
+    const untagged = !album.tracks[0]?.album;
+    if (untagged) owner.songs.push(...album.tracks);
+    else owner.albums.push(album);
+    for (const t of album.tracks) {
+      const guest = artistFor(t.artist);
+      if (guest === owner) continue;
+      if (untagged) guest.songs.push(t);
+      else if (!guest.appearsOn.includes(album)) guest.appearsOn.push(album);
+    }
+  }
+  const byYear = (a: Album, b: Album) => (a.year ?? Infinity) - (b.year ?? Infinity) || compareText(a.title, b.title);
+  for (const artist of groups.values()) {
+    artist.albums.sort(byYear);
+    artist.appearsOn.sort(byYear);
+    artist.songs.sort((a, b) => compareText(a.title, b.title));
+    const own = (t: Track) => artistKey(t.artist) === artist.key;
+    artist.tracks = [...artist.albums.flatMap((a) => a.tracks), ...artist.appearsOn.flatMap((a) => a.tracks.filter(own)), ...artist.songs];
+    const art = [...artist.albums, ...artist.appearsOn, ...artist.songs].find((x) => x.artId);
+    artist.artId = art?.artId ?? null;
+  }
+  return [...groups.values()].sort((a, b) => compareText(a.name, b.name));
 }
 
 export function byDiscAndTrack(a: Track, b: Track): number {
-  return (a.discNo ?? 1) - (b.discNo ?? 1) || (a.trackNo ?? 1e6) - (b.trackNo ?? 1e6) || a.title.localeCompare(b.title);
+  return (a.discNo ?? 1) - (b.discNo ?? 1) || (a.trackNo ?? 1e6) - (b.trackNo ?? 1e6) || compareText(a.title, b.title);
 }
 
 export async function loadLibrary(): Promise<void> {
@@ -135,6 +189,10 @@ export function useTrackMap(): Map<string, Track> {
 
 export function useAlbums(): Album[] {
   return useSyncExternalStore(subscribe, () => albums);
+}
+
+export function useArtists(): Artist[] {
+  return useSyncExternalStore(subscribe, () => artists);
 }
 
 export function usePlaylists(): Playlist[] {

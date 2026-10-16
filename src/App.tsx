@@ -2,6 +2,7 @@ import { flushSync } from "react-dom";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { AddMusic } from "./components/AddMusic";
 import { AlbumPage, Albums } from "./components/Albums";
+import { ArtistPage, Artists } from "./components/Artists";
 import { BrandMark, MenuIcon, RefreshIcon, UndoIcon } from "./components/icons";
 import { Player } from "./components/Player";
 import { PlaylistPage, Playlists } from "./components/Playlists";
@@ -12,8 +13,8 @@ import { SongMenu, type MenuTarget } from "./components/SongMenu";
 import { Songs } from "./components/Songs";
 import { Button } from "./components/ui";
 import { isShortcut } from "./lib/keys";
-import { onViewPop, pushView, startHistory, viewFromHash, viewHash } from "./lib/history";
-import { getTracks, onStorageError, useAlbums, useLibraryLoaded, useLoadError, usePlaylists, useTrackMap } from "./lib/library";
+import { currentView, onViewPop, pushView, startHistory, viewHash } from "./lib/history";
+import { getTracks, onStorageError, useAlbums, useArtists, useLibraryLoaded, useLoadError, usePlaylists, useTrackMap } from "./lib/library";
 import { useNowPlaying } from "./lib/player";
 import { applyUpdate, useReloadPending, useUpdateReady } from "./lib/pwa";
 import type { Track } from "./lib/types";
@@ -31,11 +32,12 @@ export default function App() {
   const loadError = useLoadError();
   const byId = useTrackMap();
   const albums = useAlbums();
+  const artists = useArtists();
   const playlists = usePlaylists();
   const now = useNowPlaying();
   // Decided once at launch, so the first import doesn't move the page away from its own progress.
   const [initialView] = useState<View>(() =>
-    getTracks().length === 0 ? { kind: "add" } : (viewFromHash(location.hash) ?? { kind: "songs" }),
+    getTracks().length === 0 ? { kind: "add" } : (currentView() ?? { kind: "songs" }),
   );
   const [view, setView] = useState(initialView);
   const [navOpen, setNavOpen] = useState(false);
@@ -116,12 +118,15 @@ export default function App() {
     };
   }, []);
 
-  const pageTitle =
-    view.kind === "album"
-      ? (albums.find((a) => a.key === view.key)?.title ?? "Album")
-      : view.kind === "playlist"
-        ? (playlists.find((p) => p.id === view.id)?.name ?? "Playlist")
-        : { songs: "Songs", albums: "Albums", playlists: "Playlists", queue: "Queue", add: "Add music" }[view.kind];
+  const titleFor = (v: View): string =>
+    v.kind === "album"
+      ? (albums.find((a) => a.key === v.key)?.title ?? "Album")
+      : v.kind === "artist"
+        ? (artists.find((a) => a.key === v.key)?.name ?? "Artist")
+        : v.kind === "playlist"
+          ? (playlists.find((p) => p.id === v.id)?.name ?? "Playlist")
+          : { songs: "Songs", albums: "Albums", artists: "Artists", playlists: "Playlists", queue: "Queue", add: "Add music" }[v.kind];
+  const pageTitle = titleFor(view);
   const nowPlayingTitle = now.playing ? nowTrack?.title : undefined;
 
   useEffect(() => {
@@ -139,12 +144,15 @@ export default function App() {
     menuButton.current?.focus();
   }, []);
 
-  const navigate = useCallback((next: View) => {
+  const navigate = useCallback((target: View) => {
     navigated.current = true;
+    // Only the album's own key is kept from an album origin, so origins don't chain.
+    const origin: View = view.kind === "album" ? { kind: "album", key: view.key } : view;
+    const next: View = target.kind === "album" && !target.from ? { ...target, from: origin } : target;
     pushView(next);
     setView(next);
     setNavOpen(false);
-  }, []);
+  }, [view]);
 
   const showToast = useCallback((message: string, undo?: () => void) => {
     setToast({ message, action: undo && { label: "Undo", icon: <UndoIcon />, run: undo } });
@@ -234,7 +242,19 @@ export default function App() {
           <AlbumPage
             key={view.key}
             albumKey={view.key}
-            onBack={() => navigate({ kind: "albums" })}
+            backLabel={view.from ? titleFor(view.from) : "Albums"}
+            // The origin's entry sits right behind this one, so Back keeps history linear.
+            onBack={() => (view.from ? history.back() : navigate({ kind: "albums" }))}
+            onMore={(t) => openMenu(t, { kind: "library" })}
+          />
+        ) : view.kind === "artists" ? (
+          <Artists onOpen={(key) => navigate({ kind: "artist", key })} onAdd={() => navigate({ kind: "add" })} />
+        ) : view.kind === "artist" ? (
+          <ArtistPage
+            key={view.key}
+            artistKey={view.key}
+            onBack={() => navigate({ kind: "artists" })}
+            onOpenAlbum={(key) => navigate({ kind: "album", key })}
             onMore={(t) => openMenu(t, { kind: "library" })}
           />
         ) : view.kind === "playlists" ? (

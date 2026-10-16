@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { canLinkFolders, copyIntoLibrary, NeedsAccessError, requestAccess } from "../lib/folders";
-import { addToPlaylist, createPlaylist, getPlaylists, removeTracksSafely, savePlaylist, usePlaylists } from "../lib/library";
+import { addToPlaylist, artistPageFor, createPlaylist, getPlaylists, removeTracksSafely, savePlaylist, usePlaylists } from "../lib/library";
 import { addToQueue, playNext, removeFromQueue } from "../lib/player";
 import { moved, withoutIndex } from "../lib/playlists";
 import { albumKey } from "../lib/tags";
@@ -70,6 +70,8 @@ export function SongMenu({ target, onClose, onNavigate, onToast }: Props) {
       run: () => run(() => onNavigate({ kind: "album", key: albumKey(track.albumArtist || track.artist, track.album) })),
     });
   }
+  const artist = artistPageFor(track);
+  if (artist) items.push({ label: "Go to artist", run: () => run(() => onNavigate({ kind: "artist", key: artist })) });
   if (context.kind === "playlist" && playlist) {
     const { index } = context;
     const now = Date.now();

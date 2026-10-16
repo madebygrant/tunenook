@@ -1,3 +1,8 @@
+// Ignores case and accents, and puts "Track 2" before "Track 10".
+export function compareText(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { sensitivity: "base", numeric: true });
+}
+
 export function formatClock(totalSeconds: number): string {
   const h = Math.floor(totalSeconds / 3600);
   const m = Math.floor((totalSeconds % 3600) / 60);

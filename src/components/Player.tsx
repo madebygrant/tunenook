@@ -1,7 +1,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { requestAccess } from "../lib/folders";
 import { formatClock } from "../lib/format";
-import { useTrackMap } from "../lib/library";
+import { artistPageFor, useTrackMap } from "../lib/library";
 import {
   cycleRepeat,
   hasNext,
@@ -175,6 +175,12 @@ export function Player({ onNavigate }: { onNavigate: (view: View) => void }) {
     );
 
   const albumView: View | null = track.album ? { kind: "album", key: albumKey(track.albumArtist || track.artist, track.album) } : null;
+  const artistKey = artistPageFor(track);
+  const artistView: View | null = artistKey ? { kind: "artist", key: artistKey } : null;
+  const go = (view: View) => {
+    setExpanded(false);
+    onNavigate(view);
+  };
 
   return (
     <div className={`xh-player${collapsed ? " is-collapsed" : ""}`} role="region" aria-label="Player">
@@ -204,19 +210,23 @@ export function Player({ onNavigate }: { onNavigate: (view: View) => void }) {
           <CoverArt artId={track.artId} title={track.album || track.title} size={240} />
           <div className="sheet-title">{track.title}</div>
           {muted && <div className="muted">Muted. Press M to unmute.</div>}
-          {albumView ? (
-            <button
-              className="show-link"
-              onClick={() => {
-                setExpanded(false);
-                onNavigate(albumView);
-              }}
-            >
-              {track.artist} · {track.album}
-            </button>
-          ) : (
-            <div className="muted">{track.artist}</div>
-          )}
+          <div className="sheet-links">
+            {artistView ? (
+              <button className="show-link" onClick={() => go(artistView)}>
+                {track.artist}
+              </button>
+            ) : (
+              <span>{track.artist}</span>
+            )}
+            {albumView && (
+              <>
+                <span aria-hidden="true">·</span>
+                <button className="show-link" onClick={() => go(albumView)}>
+                  {track.album}
+                </button>
+              </>
+            )}
+          </div>
           {seekRow(false)}
           <div className="sheet-controls">
             {transport}

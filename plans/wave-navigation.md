@@ -31,7 +31,7 @@ Items:
 
 Exit criterion: standard check passes. On Songs, pressing slash focuses search. Pressing M during playback silences it and pressing it again restores it.
 
-## Wave 3: artists view
+## Wave 3: artists view [done 2026-10-16]
 
 Goal: browse by artist.
 

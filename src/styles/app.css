@@ -1207,6 +1207,15 @@ mark {
   color: var(--text);
   text-decoration-color: currentColor;
 }
+.player-sheet .sheet-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  column-gap: 8px;
+  color: var(--text-muted);
+  font-size: 15px;
+}
 .player-sheet .xh-progress {
   align-self: stretch;
 }

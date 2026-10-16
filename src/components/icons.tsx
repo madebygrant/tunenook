@@ -70,6 +70,12 @@ export const AlbumIcon = (props: SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+export const ArtistIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 16 16" {...base} {...props}>
+    <path d="M11 5a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM2.5 14.5c0-3 2.5-4.5 5.5-4.5s5.5 1.5 5.5 4.5" />
+  </svg>
+);
+
 export const PlaylistIcon = (props: SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 16 16" {...base} {...props}>
     <path d="M2 3h9M2 7h9M2 11h5M11 14V9l3-1" />

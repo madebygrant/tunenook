@@ -7,6 +7,8 @@ const VIEWS: View[] = [
   { kind: "albums" },
   { kind: "album", key: "ac/dc\nback in black" },
   { kind: "album", key: "various artists\n100% hits: 50 songs?" },
+  { kind: "artists" },
+  { kind: "artist", key: "ac/dc" },
   { kind: "playlists" },
   { kind: "playlist", id: "5f0c7a1e-1d2b-4c3d-9e8f-001122334455" },
   { kind: "queue" },
@@ -124,5 +126,21 @@ describe("layers", () => {
     expect(location.hash).toBe("#/songs");
     expect(onView).toHaveBeenCalledWith({ kind: "songs" });
     stop();
+  });
+});
+
+describe("album origin", () => {
+  it("keeps the view an album was opened from in its entry, and drops it for other views", async () => {
+    const { currentView } = await import("./history");
+    history.replaceState(null, "", "#/songs");
+    pushView({ kind: "album", key: "queen\nqueen ii", from: { kind: "artist", key: "queen" } });
+    await settle();
+    expect(currentView()).toEqual({ kind: "album", key: "queen\nqueen ii", from: { kind: "artist", key: "queen" } });
+    pushView({ kind: "queue" });
+    await settle();
+    expect(currentView()).toEqual({ kind: "queue" });
+    history.back();
+    await settle();
+    expect(currentView()).toEqual({ kind: "album", key: "queen\nqueen ii", from: { kind: "artist", key: "queen" } });
   });
 });

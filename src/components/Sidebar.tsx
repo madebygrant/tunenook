@@ -1,11 +1,13 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { useCloseOnBack } from "../lib/history";
-import { AddMusicIcon, AlbumIcon, BrandMark, CloseIcon, PlaylistIcon, QueueIcon, SongsIcon } from "./icons";
+import { AddMusicIcon, AlbumIcon, ArtistIcon, BrandMark, CloseIcon, PlaylistIcon, QueueIcon, SongsIcon } from "./icons";
 
 export type View =
   | { kind: "songs" }
   | { kind: "albums" }
-  | { kind: "album"; key: string }
+  | { kind: "album"; key: string; from?: View }
+  | { kind: "artists" }
+  | { kind: "artist"; key: string }
   | { kind: "playlists" }
   | { kind: "playlist"; id: string }
   | { kind: "queue" }
@@ -26,6 +28,7 @@ const DOCK_FOCUSABLE = ".player-dock button:not([disabled]), .player-dock a[href
 const ITEMS: { kind: View["kind"]; label: string; icon: ReactNode; also?: View["kind"] }[] = [
   { kind: "songs", label: "Songs", icon: <SongsIcon /> },
   { kind: "albums", label: "Albums", icon: <AlbumIcon />, also: "album" },
+  { kind: "artists", label: "Artists", icon: <ArtistIcon />, also: "artist" },
   { kind: "playlists", label: "Playlists", icon: <PlaylistIcon />, also: "playlist" },
   { kind: "queue", label: "Queue", icon: <QueueIcon /> },
   { kind: "add", label: "Add music", icon: <AddMusicIcon /> },

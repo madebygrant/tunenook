@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { plural } from "../lib/format";
+import { compareText, plural } from "../lib/format";
 import { useTracks } from "../lib/library";
 import { playTracks } from "../lib/player";
 import { matchesSearch, searchWords, useListPlayback } from "../lib/useListPlayback";
@@ -21,12 +21,11 @@ const SORTS: [Sort, string][] = [
 const SORT_KEY = "tunenook.songSort";
 
 function compare(sort: Sort): (a: Track, b: Track) => number {
-  const text = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: "base", numeric: true });
-  const album = (a: Track, b: Track) => text(a.album, b.album) || (a.discNo ?? 1) - (b.discNo ?? 1) || (a.trackNo ?? 0) - (b.trackNo ?? 0);
-  if (sort === "artist") return (a, b) => text(a.artist, b.artist) || album(a, b);
-  if (sort === "album") return (a, b) => album(a, b) || text(a.title, b.title);
+  const album = (a: Track, b: Track) => compareText(a.album, b.album) || (a.discNo ?? 1) - (b.discNo ?? 1) || (a.trackNo ?? 0) - (b.trackNo ?? 0);
+  if (sort === "artist") return (a, b) => compareText(a.artist, b.artist) || album(a, b);
+  if (sort === "album") return (a, b) => album(a, b) || compareText(a.title, b.title);
   if (sort === "added") return (a, b) => b.addedAt - a.addedAt;
-  return (a, b) => text(a.title, b.title);
+  return (a, b) => compareText(a.title, b.title);
 }
 
 function loadSort(): Sort {

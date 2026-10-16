@@ -45,3 +45,16 @@ export interface Album {
   artId: string | null;
   tracks: Track[];
 }
+
+export interface Artist {
+  key: string;
+  name: string;
+  artId: string | null;
+  albums: Album[];
+  // Albums by another album artist, such as compilations, with at least one song by this artist.
+  appearsOn: Album[];
+  // Songs with no album tag.
+  songs: Track[];
+  // Every song by this artist: own albums oldest first, then appearances, then songs with no album.
+  tracks: Track[];
+}

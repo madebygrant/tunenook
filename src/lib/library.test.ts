@@ -71,3 +71,37 @@ describe("savePlaylist", () => {
     vi.doUnmock("./db");
   });
 });
+
+describe("groupArtists", () => {
+  it("keeps a compilation under one artist and lists songs with no album after the albums", async () => {
+    const { groupAlbums, groupArtists } = await import("./library");
+    const tracks = [
+      makeTrack("hits1", { artist: "Queen", albumArtist: "Various artists", album: "Hits", trackNo: 1 }),
+      makeTrack("hits2", { artist: "Blondie", albumArtist: "Various artists", album: "Hits", trackNo: 2 }),
+      makeTrack("late", { artist: "Queen", albumArtist: "Queen", album: "Innuendo", year: 1991, trackNo: 1 }),
+      makeTrack("early", { artist: "Queen", albumArtist: "Queen", album: "Queen II", year: 1974, trackNo: 1, artId: "album:q2" }),
+      makeTrack("loose", { title: "Demo", artist: "Queen", albumArtist: "Queen", album: "" }),
+    ];
+    const artists = groupArtists(groupAlbums(tracks));
+    expect(artists.map((a) => a.name)).toEqual(["Blondie", "Queen", "Various artists"]);
+    const [blondie, queen, various] = artists;
+    expect(various.albums.map((a) => a.title)).toEqual(["Hits"]);
+    expect(various.tracks.map((t) => t.id)).toEqual(["hits1", "hits2"]);
+    expect(queen.albums.map((a) => a.title)).toEqual(["Queen II", "Innuendo"]);
+    expect(queen.appearsOn.map((a) => a.title)).toEqual(["Hits"]);
+    expect(queen.songs.map((t) => t.id)).toEqual(["loose"]);
+    expect(queen.tracks.map((t) => t.id)).toEqual(["early", "late", "hits1", "loose"]);
+    expect(queen.artId).toBe("album:q2");
+    expect(blondie.albums).toEqual([]);
+    expect(blondie.appearsOn.map((a) => a.title)).toEqual(["Hits"]);
+    expect(blondie.tracks.map((t) => t.id)).toEqual(["hits2"]);
+  });
+
+  it("keeps songs with no album apart from an album really called Unknown album", async () => {
+    const { groupAlbums, groupArtists } = await import("./library");
+    const tracks = [makeTrack("real", { album: "Unknown album" }), makeTrack("untagged", { album: "" })];
+    const [artist] = groupArtists(groupAlbums(tracks));
+    expect(artist.albums.map((a) => a.tracks.map((t) => t.id))).toEqual([["real"]]);
+    expect(artist.songs.map((t) => t.id)).toEqual(["untagged"]);
+  });
+});

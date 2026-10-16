@@ -3,7 +3,7 @@ import { formatTotal, plural } from "../lib/format";
 import { totalSeconds, useAlbums } from "../lib/library";
 import { playTracks } from "../lib/player";
 import { matchesSearch, searchWords, useListPlayback } from "../lib/useListPlayback";
-import type { Track } from "../lib/types";
+import type { Album, Track } from "../lib/types";
 import { ArrowLeftIcon, PlayIcon, ShuffleIcon } from "./icons";
 import { SearchField } from "./SearchField";
 import { SongList } from "./SongList";
@@ -38,16 +38,7 @@ export function Albums({ onOpen, onAdd }: { onOpen: (key: string) => void; onAdd
           </div>
           <ul className="xh-shows tiles">
             {shown.map((a) => (
-              <li key={a.key} className="xh-show">
-                <button className="show-open" onClick={() => onOpen(a.key)}>
-                  <CoverArt artId={a.artId} title={a.title} size="fluid" />
-                  <div className="name">{a.title}</div>
-                  <div className="note">
-                    {a.artist}
-                    {a.year ? ` · ${a.year}` : ""}
-                  </div>
-                </button>
-              </li>
+              <AlbumTile key={a.key} album={a} note={a.year ? `${a.artist} · ${a.year}` : a.artist} onOpen={onOpen} />
             ))}
           </ul>
         </>
@@ -56,12 +47,26 @@ export function Albums({ onOpen, onAdd }: { onOpen: (key: string) => void; onAdd
   );
 }
 
+export function AlbumTile({ album, note, onOpen }: { album: Album; note: string; onOpen: (key: string) => void }) {
+  return (
+    <li className="xh-show">
+      <button className="show-open" onClick={() => onOpen(album.key)}>
+        <CoverArt artId={album.artId} title={album.title} size="fluid" />
+        <div className="name">{album.title}</div>
+        <div className="note">{note}</div>
+      </button>
+    </li>
+  );
+}
+
 export function AlbumPage({
   albumKey,
+  backLabel,
   onBack,
   onMore,
 }: {
   albumKey: string;
+  backLabel: string;
   onBack: () => void;
   onMore: (track: Track) => void;
 }) {
@@ -74,7 +79,7 @@ export function AlbumPage({
     return (
       <section>
         <Button variant="ghost" className="back" icon={<ArrowLeftIcon />} onClick={onBack}>
-          Albums
+          {backLabel}
         </Button>
         <p className="lead muted">This album is no longer in your library.</p>
       </section>
@@ -84,7 +89,7 @@ export function AlbumPage({
   return (
     <section aria-labelledby="album-title">
       <Button variant="ghost" className="back" icon={<ArrowLeftIcon />} onClick={onBack}>
-        Albums
+        {backLabel}
       </Button>
       <div className="show-head">
         <CoverArt artId={album.artId} title={album.title} size={120} />
