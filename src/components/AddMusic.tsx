@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { canLinkFolders, copyIntoLibrary, NeedsAccessError, NotEnoughSpaceError, requestAccess, scanFolder, unlinkFolder, useGranted, linkFolder } from "../lib/folders";
 import { formatBytes, plural } from "../lib/format";
-import { importFiles } from "../lib/importer";
+import { bytesToImport, importFiles } from "../lib/importer";
 import { cancelJob, dismissJob, runJob, useJob } from "../lib/job";
 import { getTracks, useFolders, useTracks } from "../lib/library";
-import { requestPersistentStorage } from "../lib/pwa";
-import { isIOS } from "../lib/standalone";
+import { promptInstall, useCanInstall } from "../lib/pwa";
+import { isIOS, useStandalone } from "../lib/standalone";
+import { ensurePersistence, freeBytes, useStorage } from "../lib/storage";
 import { describeImport } from "../lib/summary";
 import type { LinkedFolder } from "../lib/types";
 import { Dialog } from "./Dialog";
@@ -16,27 +17,15 @@ import { Button, Panel } from "./ui";
 
 const ACCEPT = "audio/*,.mp3,.m4a,.m4b,.aac,.flac,.wav,.aif,.aiff,.ogg,.oga,.opus,.m3u,.m3u8";
 
-function useStorage(): { usage: number; quota: number; persisted: boolean } | null {
-  const [info, setInfo] = useState<{ usage: number; quota: number; persisted: boolean } | null>(null);
-  const tracks = useTracks();
-  useEffect(() => {
-    let live = true;
-    void (async () => {
-      const estimate = await navigator.storage?.estimate?.().catch(() => undefined);
-      const persisted = (await navigator.storage?.persisted?.().catch(() => false)) ?? false;
-      if (live && estimate?.quota) setInfo({ usage: estimate.usage ?? 0, quota: estimate.quota, persisted });
-    })();
-    return () => {
-      live = false;
-    };
-  }, [tracks]);
-  return info;
-}
-
 export function AddMusic() {
   const job = useJob();
   const folders = useFolders();
-  const storage = useStorage();
+  const tracks = useTracks();
+  // During an import the track list changes several times a second; usage is re-read when it finishes.
+  const storage = useStorage(job?.running ? "importing" : tracks.length);
+  const standalone = useStandalone();
+  const canInstall = useCanInstall();
+  const [spaceWarning, setSpaceWarning] = useState<{ files: File[]; needed: number; free: number } | null>(null);
   const files = useRef<HTMLInputElement>(null);
   const folder = useRef<HTMLInputElement>(null);
   const [ios] = useState(() => isIOS());
@@ -46,11 +35,20 @@ export function AddMusic() {
     folder.current?.setAttribute("webkitdirectory", "");
   }, []);
 
-  function importPicked(list: FileList | null) {
+  function startImport(picked: File[]) {
+    setSpaceWarning(null);
+    void ensurePersistence(true);
+    void runJob("Adding songs", async (onProgress, signal) => describeImport(await importFiles(picked, onProgress, signal)));
+  }
+
+  // Warns before a pick that can't fit, rather than failing partway through.
+  async function importPicked(list: FileList | null) {
     if (!list?.length) return;
     const picked = [...list];
-    requestPersistentStorage();
-    void runJob("Adding songs", async (onProgress, signal) => describeImport(await importFiles(picked, onProgress, signal)));
+    const needed = bytesToImport(picked, getTracks());
+    const free = needed > 0 ? await freeBytes() : null;
+    if (free !== null && needed > free) setSpaceWarning({ files: picked, needed, free });
+    else startImport(picked);
   }
 
   return (
@@ -87,7 +85,7 @@ export function AddMusic() {
             accept={ACCEPT}
             hidden
             onChange={(e) => {
-              importPicked(e.target.files);
+              void importPicked(e.target.files);
               e.target.value = "";
             }}
           />
@@ -96,7 +94,7 @@ export function AddMusic() {
             type="file"
             hidden
             onChange={(e) => {
-              importPicked(e.target.files);
+              void importPicked(e.target.files);
               e.target.value = "";
             }}
           />
@@ -141,7 +139,42 @@ export function AddMusic() {
                 ? "The browser won't clear it to free space."
                 : "The browser may clear it if the device runs low on space."}
             </p>
+            {!storage.persisted && !standalone && ios && (
+              <p className="muted">Add TuneNook to your Home Screen and iOS keeps its storage.</p>
+            )}
+            {!storage.persisted && !standalone && !ios && canInstall && (
+              <div className="storage-install">
+                <p className="muted">Install TuneNook and the browser keeps its storage.</p>
+                <Button variant="secondary" small onClick={() => void promptInstall()}>
+                  Install
+                </Button>
+              </div>
+            )}
           </Panel>
+        )}
+        {spaceWarning && (
+          <Dialog label="Not enough space" className="space-warning" onClose={() => setSpaceWarning(null)}>
+            <div className="dialog-head">
+              <h2 className="h3">Not enough space</h2>
+            </div>
+            <div className="confirm">
+              <div>
+                <p className="muted">
+                  These songs need <b className="mono">{formatBytes(spaceWarning.needed)}</b> and about{" "}
+                  <b className="mono">{formatBytes(spaceWarning.free)}</b> is free.
+                </p>
+                <p className="muted">TuneNook will add songs until the space runs out, or you can pick fewer.</p>
+              </div>
+              <div className="dialog-actions">
+                <Button variant="secondary" onClick={() => startImport(spaceWarning.files)}>
+                  Add what fits
+                </Button>
+                <Button variant="ghost" data-autofocus onClick={() => setSpaceWarning(null)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </Dialog>
         )}
       </div>
     </section>
@@ -194,7 +227,7 @@ function FolderRow({ folder, busy }: { folder: LinkedFolder; busy: boolean }) {
   const bytes = linked.reduce((sum, t) => sum + t.size, 0);
 
   function copyAll() {
-    requestPersistentStorage();
+    void ensurePersistence(true);
     void runJob(`Copying ${folder.name} into TuneNook`, async (onProgress, signal) => {
       const todo = getTracks().filter((t) => t.source.kind === "linked" && t.source.folderId === folder.id);
       try {

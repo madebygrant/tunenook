@@ -200,6 +200,12 @@ export async function importPlaylists(files: File[], summary: ImportSummary): Pr
   }
 }
 
+// Space a pick will take: files already in the library are skipped as duplicates, so they don't count.
+export function bytesToImport(files: { name: string; size: number; type: string }[], tracks: { sourceKey: string }[]): number {
+  const known = new Set(tracks.map((t) => t.sourceKey));
+  return files.filter((f) => isAudioFile(f) && !known.has(sourceKey(f))).reduce((sum, f) => sum + f.size, 0);
+}
+
 export function importFiles(files: File[], onProgress: (p: Progress) => void, signal?: AbortSignal): Promise<ImportSummary> {
   const audio = files.filter(isAudioFile).map((file) => ({ file, source: { kind: "copied" } as const }));
   return importItems(audio, files.filter(isPlaylistFile), onProgress, signal);

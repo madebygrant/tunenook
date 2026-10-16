@@ -1972,3 +1972,21 @@ b.mono {
     transition: none;
   }
 }
+.install-prompt {
+  flex: 1;
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+  padding-top: 6px;
+}
+.install-prompt p {
+  padding-top: 0;
+}
+.space-warning p + p {
+  margin-top: 12px;
+}
+.storage-install {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+}

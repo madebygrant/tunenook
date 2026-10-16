@@ -12,9 +12,12 @@ import App from './App.tsx'
 import { checkAllAccess } from './lib/folders'
 import { loadLibrary } from './lib/library'
 import { initPlayer, restoreQueue } from './lib/player'
-import { registerServiceWorker } from './lib/pwa'
+import { listenForInstall, registerServiceWorker } from './lib/pwa'
+import { ensurePersistence } from './lib/storage'
 
 registerServiceWorker()
+listenForInstall(() => void ensurePersistence())
+void ensurePersistence()
 initPlayer()
 // The library loads before the first render so the app opens on the right page.
 void loadLibrary()

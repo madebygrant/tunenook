@@ -50,7 +50,31 @@ export function useReloadPending(): boolean {
   return useSyncExternalStore(subscribe, () => reloadPending);
 }
 
-// Asks the browser not to evict this origin's storage under storage pressure. Firefox prompts, so call it from a tap.
-export function requestPersistentStorage(): void {
-  void navigator.storage?.persist?.().catch(() => {});
+let installEvent: BeforeInstallPromptEvent | null = null;
+
+// Chrome and Edge only. Installing also makes Chrome grant persistent storage.
+export function listenForInstall(onInstalled: () => void): void {
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    installEvent = e;
+    emit();
+  });
+  window.addEventListener("appinstalled", () => {
+    installEvent = null;
+    emit();
+    onInstalled();
+  });
+}
+
+export function useCanInstall(): boolean {
+  return useSyncExternalStore(subscribe, () => installEvent !== null);
+}
+
+export async function promptInstall(): Promise<void> {
+  const e = installEvent;
+  if (!e) return;
+  // The event can only prompt once.
+  installEvent = null;
+  emit();
+  await e.prompt();
 }

@@ -17,6 +17,19 @@ async function load() {
   return { library, importer };
 }
 
+describe("bytesToImport", () => {
+  it("counts only new audio files", async () => {
+    const { importer } = await load();
+    const files = [
+      { name: "new.mp3", size: 100, type: "audio/mpeg" },
+      { name: "old.mp3", size: 50, type: "audio/mpeg" },
+      { name: "Mix.m3u", size: 10, type: "audio/x-mpegurl" },
+      { name: "cover.jpg", size: 70, type: "image/jpeg" },
+    ];
+    expect(importer.bytesToImport(files, [{ sourceKey: "old.mp3\n50" }])).toBe(100);
+  });
+});
+
 describe("importFiles", () => {
   it("names untagged songs from the file name and counts them", async () => {
     const { library, importer } = await load();
