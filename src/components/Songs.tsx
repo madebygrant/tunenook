@@ -9,22 +9,35 @@ import { SearchField } from "./SearchField";
 import { SongList } from "./SongList";
 import { Button } from "./ui";
 
-type Sort = "title" | "artist" | "album" | "added";
+type Sort = "title" | "artist" | "album" | "added" | "played" | "plays";
 
 const SORTS: [Sort, string][] = [
   ["title", "Title"],
   ["artist", "Artist"],
   ["album", "Album"],
   ["added", "Recently added"],
+  ["played", "Recently played"],
+  ["plays", "Most played"],
 ];
 
 const SORT_KEY = "tunenook.songSort";
 
-function compare(sort: Sort): (a: Track, b: Track) => number {
+type PlayStats = Map<string, Pick<Track, "lastPlayedAt" | "playCount">>;
+
+function playStats(list: Track[]): PlayStats {
+  return new Map(list.map((t) => [t.id, { lastPlayedAt: t.lastPlayedAt, playCount: t.playCount }]));
+}
+
+// Play sorts use stats read when the page opened or the sort was picked, so rows don't jump when a play is counted.
+function compare(sort: Sort, stats: PlayStats): (a: Track, b: Track) => number {
   const album = (a: Track, b: Track) => compareText(a.album, b.album) || (a.discNo ?? 1) - (b.discNo ?? 1) || (a.trackNo ?? 0) - (b.trackNo ?? 0);
   if (sort === "artist") return (a, b) => compareText(a.artist, b.artist) || album(a, b);
   if (sort === "album") return (a, b) => album(a, b) || compareText(a.title, b.title);
   if (sort === "added") return (a, b) => b.addedAt - a.addedAt;
+  const of = (t: Track) => stats.get(t.id) ?? t;
+  const recent = (a: Track, b: Track) => (of(b).lastPlayedAt ?? 0) - (of(a).lastPlayedAt ?? 0);
+  if (sort === "played") return (a, b) => recent(a, b) || compareText(a.title, b.title);
+  if (sort === "plays") return (a, b) => (of(b).playCount ?? 0) - (of(a).playCount ?? 0) || recent(a, b) || compareText(a.title, b.title);
   return (a, b) => compareText(a.title, b.title);
 }
 
@@ -41,17 +54,19 @@ export function Songs({ onMore, onAdd }: { onMore: (track: Track) => void; onAdd
   const tracks = useTracks();
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>(loadSort);
+  const [stats, setStats] = useState(() => playStats(tracks));
   const words = searchWords(query);
   const wordsKey = words.join(" ");
   const shown = useMemo(
-    () => tracks.filter((t) => matchesSearch(t, searchWords(wordsKey))).sort(compare(sort)),
-    [tracks, wordsKey, sort],
+    () => tracks.filter((t) => matchesSearch(t, searchWords(wordsKey))).sort(compare(sort, stats)),
+    [tracks, wordsKey, sort, stats],
   );
   const { currentIndex, playing, onPlay } = useListPlayback(shown);
   const ids = shown.map((t) => t.id);
 
   function changeSort(next: Sort) {
     setSort(next);
+    setStats(playStats(tracks));
     try {
       localStorage.setItem(SORT_KEY, next);
     } catch {

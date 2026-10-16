@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { importItems, importPlaylists, type ImportSummary, type Progress } from "./importer";
-import { deleteFolder, getFolders, getTracks, removeTracks, replaceTrack, saveFolder } from "./library";
+import { deleteFolder, getFolders, getTracks, patchTrack, removeTracks, saveFolder } from "./library";
 import { isPlaylistFile } from "./m3u";
 import { createListeners } from "./store";
 import { isAudioFile } from "./tags";
@@ -148,8 +148,10 @@ export async function copyIntoLibrary(
     onProgress({ done: i, total: todo.length, current: track.fileName });
     try {
       const file = await linkedFile(track);
-      await replaceTrack({ ...track, source: { kind: "copied" } }, [{ store: "files", op: "put", key: track.id, value: file }]);
-      result.copied++;
+      // Skipped when the song was removed while its file was read.
+      if (await patchTrack(track.id, { source: { kind: "copied" } }, [{ store: "files", op: "put", key: track.id, value: file }])) {
+        result.copied++;
+      }
     } catch (e) {
       if (e instanceof NeedsAccessError) throw e;
       if (e instanceof DOMException && e.name === "QuotaExceededError") {

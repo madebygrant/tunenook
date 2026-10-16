@@ -72,6 +72,49 @@ describe("savePlaylist", () => {
   });
 });
 
+describe("plays and likes", () => {
+  it("keeps both a like and a play count made at the same moment", async () => {
+    const { library, db } = await load();
+    await library.addTrack({ track: makeTrack("a") });
+    await Promise.all([library.toggleLike("a"), library.recordPlay("a")]);
+    const saved = await db.get<import("./types").Track>("tracks", "a");
+    expect(saved?.likedAt).toBeTypeOf("number");
+    expect(saved?.playCount).toBe(1);
+    expect(library.getTrack("a")?.playCount).toBe(1);
+  });
+
+  it("doesn't bring back a song that's removed while a like or play is waiting to save", async () => {
+    const { library, db } = await load();
+    await library.addTrack({ track: makeTrack("a"), file: new Blob(["a"]) });
+    const removal = library.removeTracks(new Set(["a"]));
+    await Promise.all([removal, library.toggleLike("a"), library.recordPlay("a")]);
+    expect(await db.get("tracks", "a")).toBeUndefined();
+    expect(library.getTrack("a")).toBeUndefined();
+  });
+
+  it("skips a copy-in patch for a song removed before its turn", async () => {
+    const { library, db } = await load();
+    await library.addTrack({ track: makeTrack("a", { source: { kind: "linked", folderId: "f", path: "a.mp3" } }) });
+    const removal = library.removeTracks(new Set(["a"]));
+    const patched = library.patchTrack("a", { source: { kind: "copied" } }, [{ store: "files", op: "put", key: "a", value: new Blob(["a"]) }]);
+    await removal;
+    expect(await patched).toBe(false);
+    expect(await db.get("tracks", "a")).toBeUndefined();
+    expect(await db.get("files", "a")).toBeUndefined();
+  });
+
+  it("puts a like back and reports it when the write fails", async () => {
+    const { library } = await load();
+    await library.addTrack({ track: makeTrack("a") });
+    const errors = vi.fn();
+    library.onStorageError(errors);
+    vi.spyOn(await import("./db"), "write").mockRejectedValueOnce(new DOMException("Full", "QuotaExceededError"));
+    await library.toggleLike("a");
+    expect(library.getTrack("a")?.likedAt).toBeUndefined();
+    expect(errors).toHaveBeenCalledWith("Couldn't like the song.");
+  });
+});
+
 describe("groupArtists", () => {
   it("keeps a compilation under one artist and lists songs with no album after the albums", async () => {
     const { groupAlbums, groupArtists } = await import("./library");

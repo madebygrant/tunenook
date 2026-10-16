@@ -20,6 +20,10 @@ export interface Track {
   // Matches files picked again, so a re-import skips them.
   sourceKey: string;
   source: TrackSource;
+  playCount?: number;
+  lastPlayedAt?: number;
+  // Set while the song is liked, so Liked songs can list the latest first.
+  likedAt?: number;
 }
 
 export interface LinkedFolder {

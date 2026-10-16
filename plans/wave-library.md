@@ -6,7 +6,7 @@ Every wave ends with the standard check: `pnpm test && pnpm lint && pnpm build` 
 
 New `Track` fields are optional, so songs saved before this plan still load. The `tracks` store keeps whole objects, so no IndexedDB version bump is needed.
 
-## Wave 1: play history and favourites
+## Wave 1: play history and favourites [done 2026-10-16]
 
 Goal: the app knows what you play and what you like.
 

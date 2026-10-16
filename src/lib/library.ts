@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { get, getAll, write, type Write } from "./db";
 import { newPlaylist, renamed, withoutTracks, withTracks } from "./playlists";
 import { compareText } from "./format";
@@ -191,6 +191,14 @@ export function useAlbums(): Album[] {
   return useSyncExternalStore(subscribe, () => albums);
 }
 
+export function useLikedTracks(): Track[] {
+  const list = useTracks();
+  return useMemo(
+    () => list.filter((t) => t.likedAt !== undefined).sort((a, b) => (b.likedAt ?? 0) - (a.likedAt ?? 0)),
+    [list],
+  );
+}
+
 export function useArtists(): Artist[] {
   return useSyncExternalStore(subscribe, () => artists);
 }
@@ -228,67 +236,129 @@ export interface NewTrack {
   art?: { id: string; blob: Blob };
 }
 
-export async function addTrack({ track, file, art }: NewTrack): Promise<void> {
-  const writes: Write[] = [{ store: "tracks", op: "put", value: track }];
-  if (file) writes.push({ store: "files", op: "put", key: track.id, value: file });
-  // Songs from the same album imported before its cover turned up get it now.
-  const backfill: Track[] = [];
-  if (art) {
-    writes.push({ store: "art", op: "put", key: art.id, value: art.blob });
-    if (art.id.startsWith("album:")) {
-      const key = art.id.slice("album:".length);
-      for (const t of store.values()) {
-        if (!t.artId && t.album && albumKey(t.albumArtist || t.artist, t.album) === key) backfill.push({ ...t, artId: art.id });
+// Song writes run one at a time, each built from the song as it stands when its turn comes, so a like can't
+// resurrect a song removed just before it or be overwritten by a copy that started earlier.
+let trackWrites: Promise<unknown> = Promise.resolve();
+
+function queueTrackWrite<T>(task: () => Promise<T>): Promise<T> {
+  const run = trackWrites.then(task, task);
+  trackWrites = run.catch(() => {});
+  return run;
+}
+
+export function addTrack({ track, file, art }: NewTrack): Promise<void> {
+  return queueTrackWrite(async () => {
+    const writes: Write[] = [{ store: "tracks", op: "put", value: track }];
+    if (file) writes.push({ store: "files", op: "put", key: track.id, value: file });
+    // Songs from the same album imported before its cover turned up get it now.
+    const backfill: string[] = [];
+    if (art) {
+      writes.push({ store: "art", op: "put", key: art.id, value: art.blob });
+      if (art.id.startsWith("album:")) {
+        const key = art.id.slice("album:".length);
+        for (const t of store.values()) {
+          if (t.artId || !t.album || albumKey(t.albumArtist || t.artist, t.album) !== key) continue;
+          backfill.push(t.id);
+          writes.push({ store: "tracks", op: "put", value: { ...t, artId: art.id } });
+        }
       }
-      backfill.forEach((t) => writes.push({ store: "tracks", op: "put", value: t }));
     }
-  }
-  await write(writes);
-  if (art) forgetArt(art.id);
-  putTrack(track);
-  backfill.forEach(putTrack);
-  publishSoon();
+    await write(writes);
+    if (art) forgetArt(art.id);
+    putTrack(track);
+    for (const id of backfill) {
+      const latest = store.get(id);
+      if (latest && art) putTrack({ ...latest, artId: art.id });
+    }
+    publishSoon();
+  });
 }
 
-export async function replaceTrack(track: Track, extra: Write[] = []): Promise<void> {
-  await write([...extra, { store: "tracks", op: "put", value: track }]);
-  putTrack(track);
-  publishSoon();
+// Applies the patch to the song as it stands when the write runs. False when the song has gone.
+export function patchTrack(id: string, patch: Partial<Omit<Track, "id">>, extra: Write[] = []): Promise<boolean> {
+  return queueTrackWrite(async () => {
+    const current = store.get(id);
+    if (!current) return false;
+    await write([...extra, { store: "tracks", op: "put", value: { ...current, ...patch } }]);
+    // Re-read, so a like made during the write survives.
+    putTrack({ ...(store.get(id) ?? current), ...patch });
+    publishSoon();
+    return true;
+  });
 }
 
-export async function updateTrack(id: string, patch: Partial<Omit<Track, "id">>): Promise<void> {
+// Memory first, so a tap shows at once and quick changes build on each other. The queued write saves whatever
+// memory holds by then; if it fails, memory goes back to what storage has.
+export function updateTrack(
+  id: string,
+  patch: Partial<Omit<Track, "id">>,
+  options: { now?: boolean; failure?: string } = {},
+): Promise<boolean> {
+  const current = store.get(id);
+  if (!current) return Promise.resolve(false);
+  putTrack({ ...current, ...patch });
+  if (options.now) publish();
+  else publishSoon();
+  return queueTrackWrite(async () => {
+    const latest = store.get(id);
+    if (!latest) return false;
+    try {
+      await write([{ store: "tracks", op: "put", value: latest }]);
+      return true;
+    } catch (e) {
+      const saved = await get<Track>("tracks", id).catch(() => undefined);
+      if (saved && store.has(id)) {
+        putTrack(saved);
+        publish();
+      }
+      if (options.failure) reportError(options.failure, e);
+      else console.error("Couldn't update song", e);
+      return false;
+    }
+  });
+}
+
+export async function recordPlay(id: string): Promise<void> {
+  const track = store.get(id);
+  // A missed count isn't worth interrupting playback over, so failures are only logged.
+  if (track) await updateTrack(id, { playCount: (track.playCount ?? 0) + 1, lastPlayedAt: Date.now() });
+}
+
+export async function toggleLike(id: string): Promise<void> {
   const track = store.get(id);
   if (!track) return;
-  try {
-    await replaceTrack({ ...track, ...patch });
-  } catch (e) {
-    // Only fills in details such as duration; the next play tries again.
-    console.error("Couldn't update song", e);
-  }
+  const liked = track.likedAt === undefined;
+  await updateTrack(
+    id,
+    { likedAt: liked ? Date.now() : undefined },
+    { now: true, failure: liked ? "Couldn't like the song." : "Couldn't unlike the song." },
+  );
 }
 
-export async function removeTracks(ids: ReadonlySet<string>): Promise<void> {
-  if (ids.size === 0) return;
-  const now = Date.now();
-  const gone = [...ids].map((id) => store.get(id)).filter((t): t is Track => t !== undefined);
-  const changed = playlists.map((p) => withoutTracks(p, ids, now));
-  const writes: Write[] = [];
-  const freedArt = new Map<string, number>();
-  for (const t of gone) {
-    writes.push({ store: "tracks", op: "delete", key: t.id });
-    // Linked tracks have no stored copy; their files on disk are never touched.
-    if (t.source.kind === "copied") writes.push({ store: "files", op: "delete", key: t.id });
-    if (t.artId) freedArt.set(t.artId, (freedArt.get(t.artId) ?? 0) + 1);
-  }
-  const unusedArt = [...freedArt].filter(([artId, n]) => (artUsers.get(artId) ?? 0) <= n).map(([artId]) => artId);
-  unusedArt.forEach((artId) => writes.push({ store: "art", op: "delete", key: artId }));
-  changed.forEach((p, i) => p !== playlists[i] && writes.push({ store: "playlists", op: "put", value: p }));
-  await write(writes);
-  unusedArt.forEach(forgetArt);
-  gone.forEach((t) => dropTrack(t.id));
-  playlists = changed;
-  publish();
-  removedListeners.forEach((listener) => listener(ids));
+export function removeTracks(ids: ReadonlySet<string>): Promise<void> {
+  if (ids.size === 0) return Promise.resolve();
+  return queueTrackWrite(async () => {
+    const now = Date.now();
+    const gone = [...ids].map((id) => store.get(id)).filter((t): t is Track => t !== undefined);
+    const changed = playlists.map((p) => withoutTracks(p, ids, now));
+    const writes: Write[] = [];
+    const freedArt = new Map<string, number>();
+    for (const t of gone) {
+      writes.push({ store: "tracks", op: "delete", key: t.id });
+      // Linked tracks have no stored copy; their files on disk are never touched.
+      if (t.source.kind === "copied") writes.push({ store: "files", op: "delete", key: t.id });
+      if (t.artId) freedArt.set(t.artId, (freedArt.get(t.artId) ?? 0) + 1);
+    }
+    const unusedArt = [...freedArt].filter(([artId, n]) => (artUsers.get(artId) ?? 0) <= n).map(([artId]) => artId);
+    unusedArt.forEach((artId) => writes.push({ store: "art", op: "delete", key: artId }));
+    changed.forEach((p, i) => p !== playlists[i] && writes.push({ store: "playlists", op: "put", value: p }));
+    await write(writes);
+    unusedArt.forEach(forgetArt);
+    gone.forEach((t) => dropTrack(t.id));
+    playlists = changed;
+    publish();
+    removedListeners.forEach((listener) => listener(ids));
+  });
 }
 
 // For taps that don't await: reports instead of rejecting.

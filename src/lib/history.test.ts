@@ -10,6 +10,7 @@ const VIEWS: View[] = [
   { kind: "artists" },
   { kind: "artist", key: "ac/dc" },
   { kind: "playlists" },
+  { kind: "liked" },
   { kind: "playlist", id: "5f0c7a1e-1d2b-4c3d-9e8f-001122334455" },
   { kind: "queue" },
   { kind: "add" },

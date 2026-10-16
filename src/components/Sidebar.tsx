@@ -10,6 +10,7 @@ export type View =
   | { kind: "artist"; key: string }
   | { kind: "playlists" }
   | { kind: "playlist"; id: string }
+  | { kind: "liked" }
   | { kind: "queue" }
   | { kind: "add" };
 
@@ -25,11 +26,11 @@ interface Props {
 const FOCUSABLE = "button:not([disabled]), a[href]";
 const DOCK_FOCUSABLE = ".player-dock button:not([disabled]), .player-dock a[href]";
 
-const ITEMS: { kind: View["kind"]; label: string; icon: ReactNode; also?: View["kind"] }[] = [
+const ITEMS: { kind: View["kind"]; label: string; icon: ReactNode; also?: View["kind"][] }[] = [
   { kind: "songs", label: "Songs", icon: <SongsIcon /> },
-  { kind: "albums", label: "Albums", icon: <AlbumIcon />, also: "album" },
-  { kind: "artists", label: "Artists", icon: <ArtistIcon />, also: "artist" },
-  { kind: "playlists", label: "Playlists", icon: <PlaylistIcon />, also: "playlist" },
+  { kind: "albums", label: "Albums", icon: <AlbumIcon />, also: ["album"] },
+  { kind: "artists", label: "Artists", icon: <ArtistIcon />, also: ["artist"] },
+  { kind: "playlists", label: "Playlists", icon: <PlaylistIcon />, also: ["playlist", "liked"] },
   { kind: "queue", label: "Queue", icon: <QueueIcon /> },
   { kind: "add", label: "Add music", icon: <AddMusicIcon /> },
 ];
@@ -73,7 +74,7 @@ export function Sidebar({ view, onNavigate, drawer, open, onClose, onShortcuts }
         </button>
       </div>
       {ITEMS.map(({ kind, label, icon, also }) => {
-        const active = view.kind === kind || view.kind === also;
+        const active = view.kind === kind || also?.includes(view.kind) === true;
         return (
           <button
             key={kind}

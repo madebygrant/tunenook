@@ -5,7 +5,7 @@ import { AlbumPage, Albums } from "./components/Albums";
 import { ArtistPage, Artists } from "./components/Artists";
 import { BrandMark, MenuIcon, RefreshIcon, UndoIcon } from "./components/icons";
 import { Player } from "./components/Player";
-import { PlaylistPage, Playlists } from "./components/Playlists";
+import { LikedPage, PlaylistPage, Playlists } from "./components/Playlists";
 import { Queue } from "./components/Queue";
 import { Shortcuts } from "./components/Shortcuts";
 import { Sidebar, type View } from "./components/Sidebar";
@@ -125,7 +125,7 @@ export default function App() {
         ? (artists.find((a) => a.key === v.key)?.name ?? "Artist")
         : v.kind === "playlist"
           ? (playlists.find((p) => p.id === v.id)?.name ?? "Playlist")
-          : { songs: "Songs", albums: "Albums", artists: "Artists", playlists: "Playlists", queue: "Queue", add: "Add music" }[v.kind];
+          : { songs: "Songs", albums: "Albums", artists: "Artists", playlists: "Playlists", liked: "Liked songs", queue: "Queue", add: "Add music" }[v.kind];
   const pageTitle = titleFor(view);
   const nowPlayingTitle = now.playing ? nowTrack?.title : undefined;
 
@@ -258,7 +258,9 @@ export default function App() {
             onMore={(t) => openMenu(t, { kind: "library" })}
           />
         ) : view.kind === "playlists" ? (
-          <Playlists onOpen={(id) => navigate({ kind: "playlist", id })} />
+          <Playlists onOpen={(id) => navigate({ kind: "playlist", id })} onOpenLiked={() => navigate({ kind: "liked" })} />
+        ) : view.kind === "liked" ? (
+          <LikedPage onBack={() => navigate({ kind: "playlists" })} onMore={(t) => openMenu(t, { kind: "library" })} />
         ) : view.kind === "playlist" ? (
           <PlaylistPage
             key={view.id}

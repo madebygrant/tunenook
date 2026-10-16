@@ -2,6 +2,7 @@ import { useEffect, useRef, type RefObject } from "react";
 import type { View } from "../components/Sidebar";
 
 const SONGS: View = { kind: "songs" };
+const PLAIN_KINDS = new Set<string>(["songs", "albums", "artists", "playlists", "liked", "queue", "add"] satisfies View["kind"][]);
 
 export function viewHash(view: View): string {
   if (view.kind === "album" || view.kind === "artist") return `#/${view.kind}/${encodeURIComponent(view.key)}`;
@@ -13,11 +14,7 @@ export function viewFromHash(hash: string): View | null {
   const match = /^#\/([a-z]+)(?:\/(.+))?$/.exec(hash);
   if (!match) return null;
   const [, kind, arg] = match;
-  if (arg === undefined) {
-    return kind === "songs" || kind === "albums" || kind === "artists" || kind === "playlists" || kind === "queue" || kind === "add"
-      ? { kind }
-      : null;
-  }
+  if (arg === undefined) return PLAIN_KINDS.has(kind) ? ({ kind } as View) : null;
   let value: string;
   try {
     value = decodeURIComponent(arg);

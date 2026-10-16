@@ -10,6 +10,7 @@ const SHORTCUTS: [string, string][] = [
   ["S", "Shuffle on or off"],
   ["R", "Repeat off, all or one"],
   ["M", "Mute or unmute"],
+  ["L", "Like or unlike the song"],
   ["/", "Search songs, albums or artists"],
   ["?", "Show this list"],
 ];

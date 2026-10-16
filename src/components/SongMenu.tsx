@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { canLinkFolders, copyIntoLibrary, NeedsAccessError, requestAccess } from "../lib/folders";
-import { addToPlaylist, artistPageFor, createPlaylist, getPlaylists, removeTracksSafely, savePlaylist, usePlaylists } from "../lib/library";
+import { addToPlaylist, artistPageFor, createPlaylist, toggleLike, getPlaylists, removeTracksSafely, savePlaylist, usePlaylists } from "../lib/library";
 import { addToQueue, playNext, removeFromQueue } from "../lib/player";
 import { moved, withoutIndex } from "../lib/playlists";
 import { albumKey } from "../lib/tags";
@@ -63,6 +63,10 @@ export function SongMenu({ target, onClose, onNavigate, onToast }: Props) {
     { label: "Play next", run: () => run(() => playNext([track.id]), `${track.title} plays next.`) },
     { label: "Add to queue", run: () => run(() => addToQueue([track.id]), `Added ${track.title} to the queue.`) },
     { label: "Add to playlist…", run: () => setStep("pick") },
+    {
+      label: track.likedAt === undefined ? "Like" : "Unlike",
+      run: () => run(() => void toggleLike(track.id)),
+    },
   ];
   if (track.album) {
     items.push({

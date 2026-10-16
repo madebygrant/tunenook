@@ -76,6 +76,12 @@ export const ArtistIcon = (props: SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+export const HeartIcon = ({ filled, ...props }: SVGProps<SVGSVGElement> & { filled?: boolean }) => (
+  <svg viewBox="0 0 16 16" {...base} fill={filled ? "currentColor" : "none"} {...props}>
+    <path d="M8 13.5S1.75 9.75 1.75 5.75A3 3 0 0 1 8 4.5a3 3 0 0 1 6.25 1.25C14.25 9.75 8 13.5 8 13.5z" />
+  </svg>
+);
+
 export const PlaylistIcon = (props: SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 16 16" {...base} {...props}>
     <path d="M2 3h9M2 7h9M2 11h5M11 14V9l3-1" />

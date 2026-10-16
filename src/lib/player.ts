@@ -1,8 +1,9 @@
 import { useSyncExternalStore } from "react";
 import { linkedFile, NeedsAccessError } from "./folders";
-import { artDataUrl, getTrack, onTracksRemoved, storedFile, updateTrack } from "./library";
+import { artDataUrl, getTrack, onTracksRemoved, recordPlay, storedFile, updateTrack } from "./library";
 import { publishPlaybackState, publishPosition } from "./mediaSession";
 import { throttledWriter } from "./persist";
+import { createListenCounter } from "./playCount";
 import {
   append as appendQueue,
   currentId,
@@ -51,6 +52,9 @@ let unlocked = false;
 let skips = 0;
 let wantPlay = false;
 let silentUrl: string | null = null;
+const listens = createListenCounter();
+// The song whose audio is on the element. A failed load keeps the old audio playing, and that isn't a play of the new song.
+let countingId: string | null = null;
 const urls = new Map<string, string>();
 const pending = new Map<string, Promise<string>>();
 const { emit, subscribe } = createListeners();
@@ -157,6 +161,8 @@ function setSource(id: string, url: string, autoplay: boolean, startAt: number):
   position = Math.floor(startAt);
   duration = getTrack(id)?.duration ?? NaN;
   wantPlay = autoplay;
+  listens.reset();
+  countingId = id;
   audio.src = url;
   setNow({ id, failure: null, blocked: false });
   if (autoplay) play();
@@ -167,6 +173,7 @@ function setSource(id: string, url: string, autoplay: boolean, startAt: number):
 function load(autoplay: boolean, startAt = 0): void {
   const id = currentId(queue);
   const token = ++loadToken;
+  countingId = null;
   if (!audio) return;
   if (!id) {
     audio.removeAttribute("src");
@@ -218,12 +225,15 @@ function clearMetadata(): void {
 function advance(auto: boolean): void {
   const at = nextAt(queue, auto);
   if (at === null) {
-    // End of the queue: rewind and stop.
+    // End of the queue: rewind and stop. Playing it again from there is a new play.
     audio?.pause();
+    listens.reset();
     if (audio) audio.currentTime = 0;
     return;
   }
   if (at === queue.at && audio) {
+    // Repeat one plays the same load again, and each time round is a play.
+    listens.reset();
     audio.currentTime = 0;
     play();
     return;
@@ -276,6 +286,7 @@ export function initPlayer(): void {
   });
   a.addEventListener("timeupdate", () => {
     if (a.src === silentUrl) return;
+    if (countingId && listens.observe(a.currentTime, a.duration)) void recordPlay(countingId);
     const next = Math.floor(a.currentTime);
     if (next !== position) {
       position = next;
@@ -296,6 +307,7 @@ export function initPlayer(): void {
     publishPosition(a);
     save();
   });
+  a.addEventListener("seeking", listens.jumped);
   a.addEventListener("seeked", () => publishPosition(a));
   a.addEventListener("volumechange", emit);
   a.addEventListener("ended", onEnded);
@@ -400,6 +412,7 @@ export function previous(): void {
   if (!audio) return;
   const at = prevAt(queue);
   if (audio.currentTime > RESTART_AFTER_SECONDS || at === null) {
+    listens.reset();
     seek(0);
     return;
   }

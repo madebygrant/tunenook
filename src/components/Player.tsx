@@ -1,9 +1,10 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { requestAccess } from "../lib/folders";
 import { formatClock } from "../lib/format";
-import { artistPageFor, useTrackMap } from "../lib/library";
+import { artistPageFor, toggleLike, useTrackMap } from "../lib/library";
 import {
   cycleRepeat,
+  getNowPlaying,
   hasNext,
   next,
   previous,
@@ -24,7 +25,7 @@ import { isShortcut } from "../lib/keys";
 import { idAt } from "../lib/queue";
 import { albumKey } from "../lib/tags";
 import { Dialog } from "./Dialog";
-import { ChevronDownIcon, CloseIcon, NextIcon, PauseIcon, PlayIcon, PrevIcon, RefreshIcon, RepeatIcon, RepeatOneIcon, ShuffleIcon } from "./icons";
+import { ChevronDownIcon, CloseIcon, HeartIcon, NextIcon, PauseIcon, PlayIcon, PrevIcon, RefreshIcon, RepeatIcon, RepeatOneIcon, ShuffleIcon } from "./icons";
 import type { View } from "./Sidebar";
 import { Button, CoverArt } from "./ui";
 
@@ -36,6 +37,11 @@ function loadCollapsed(): boolean {
   } catch {
     return false;
   }
+}
+
+function likeCurrent(): void {
+  const id = getNowPlaying().id;
+  if (id) void toggleLike(id);
 }
 
 export function Player({ onNavigate }: { onNavigate: (view: View) => void }) {
@@ -73,6 +79,7 @@ export function Player({ onNavigate }: { onNavigate: (view: View) => void }) {
       else if (key === "s") once(toggleShuffle);
       else if (key === "r") once(cycleRepeat);
       else if (key === "m") once(toggleMute);
+      else if (key === "l") once(() => likeCurrent());
       else return;
       e.preventDefault();
     };
@@ -110,8 +117,14 @@ export function Player({ onNavigate }: { onNavigate: (view: View) => void }) {
   );
 
   const repeatLabel = queue.repeat === "off" ? "Repeat off" : queue.repeat === "all" ? "Repeat all" : "Repeat one";
-  const modes = (
+  const liked = track.likedAt !== undefined;
+  const modes = (withLike: boolean) => (
     <div className="modes">
+      {withLike && (
+        <button className="mode-btn" aria-pressed={liked} aria-label="Like" title={`${liked ? "Liked" : "Like"} (L)`} onClick={likeCurrent}>
+          <HeartIcon filled={liked} />
+        </button>
+      )}
       <button
         className="mode-btn"
         aria-pressed={queue.shuffle}
@@ -198,7 +211,7 @@ export function Player({ onNavigate }: { onNavigate: (view: View) => void }) {
       </span>
       {transport}
       {seekRow(true)}
-      {modes}
+      {modes(false)}
       <button className="dock-toggle" aria-expanded={!collapsed} aria-label={collapsed ? "Expand player" : "Collapse player"} onClick={toggleCollapsed}>
         <ChevronDownIcon />
       </button>
@@ -230,7 +243,7 @@ export function Player({ onNavigate }: { onNavigate: (view: View) => void }) {
           {seekRow(false)}
           <div className="sheet-controls">
             {transport}
-            {modes}
+            {modes(true)}
           </div>
           <button
             className="up-next"

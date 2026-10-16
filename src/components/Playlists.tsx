@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { formatTotal, plural } from "../lib/format";
-import { addToPlaylist, createPlaylist, deletePlaylist, renamePlaylist, savePlaylist, totalSeconds, usePlaylists, useTrackMap, useTracks } from "../lib/library";
+import { addToPlaylist, createPlaylist, deletePlaylist, renamePlaylist, savePlaylist, totalSeconds, useLikedTracks, usePlaylists, useTrackMap, useTracks } from "../lib/library";
 import { playTracks } from "../lib/player";
 import { matchesSearch, searchWords, useListPlayback } from "../lib/useListPlayback";
 import type { Playlist, Track } from "../lib/types";
@@ -15,9 +15,25 @@ function playlistTracks(p: Playlist, byId: Map<string, Track>): Track[] {
   return p.trackIds.map((id) => byId.get(id)).filter((t): t is Track => t !== undefined);
 }
 
-export function Playlists({ onOpen }: { onOpen: (id: string) => void }) {
+function PlaylistTile({ name, tracks, onOpen }: { name: string; tracks: Track[]; onOpen: () => void }) {
+  return (
+    <li className="xh-show">
+      <button className="show-open" onClick={onOpen}>
+        <CoverArt artId={tracks.find((t) => t.artId)?.artId ?? null} title={name} size="fluid" />
+        <div className="name">{name}</div>
+        <div className="note">
+          {plural(tracks.length, "song")}
+          {tracks.length > 0 && ` · ${formatTotal(totalSeconds(tracks))}`}
+        </div>
+      </button>
+    </li>
+  );
+}
+
+export function Playlists({ onOpen, onOpenLiked }: { onOpen: (id: string) => void; onOpenLiked: () => void }) {
   const playlists = usePlaylists();
   const byId = useTrackMap();
+  const liked = useLikedTracks();
   const [name, setName] = useState("");
 
   return (
@@ -51,26 +67,60 @@ export function Playlists({ onOpen }: { onOpen: (id: string) => void }) {
           }
         />
       </form>
-      {playlists.length === 0 ? (
+      <ul className="xh-shows tiles">
+        <PlaylistTile name="Liked songs" tracks={liked} onOpen={onOpenLiked} />
+        {playlists.map((p) => (
+          <PlaylistTile key={p.id} name={p.name} tracks={playlistTracks(p, byId)} onOpen={() => onOpen(p.id)} />
+        ))}
+      </ul>
+      {playlists.length === 0 && (
         <p className="lead muted">No playlists yet. Make one here, or add a song to a new playlist from its menu.</p>
+      )}
+    </section>
+  );
+}
+
+export function LikedPage({ onBack, onMore }: { onBack: () => void; onMore: (track: Track) => void }) {
+  const tracks = useLikedTracks();
+  const { currentIndex, playing, onPlay } = useListPlayback(tracks);
+  const ids = tracks.map((t) => t.id);
+
+  return (
+    <section aria-labelledby="liked-title">
+      <Button variant="ghost" className="back" icon={<ArrowLeftIcon />} onClick={onBack}>
+        Playlists
+      </Button>
+      <div className="show-head">
+        <CoverArt artId={tracks.find((t) => t.artId)?.artId ?? null} title="Liked songs" size={120} />
+        <div>
+          <h1 id="liked-title" className="display-lg" tabIndex={-1}>
+            Liked songs
+          </h1>
+          <div className="count">
+            {plural(tracks.length, "song")}
+            {tracks.length > 0 && ` · ${formatTotal(totalSeconds(tracks))}`}
+          </div>
+          <div className="head-actions">
+            <Button icon={<PlayIcon />} disabled={!ids.length} onClick={() => playTracks(ids, 0, { shuffle: false })}>
+              Play
+            </Button>
+            <Button variant="secondary" icon={<ShuffleIcon />} disabled={!ids.length} onClick={() => playTracks(ids, -1, { shuffle: true })}>
+              Shuffle
+            </Button>
+          </div>
+        </div>
+      </div>
+      {tracks.length === 0 ? (
+        <p className="list-empty muted">Songs you like show up here. Like one from its menu or the player, or press L while it plays.</p>
       ) : (
-        <ul className="xh-shows tiles">
-          {playlists.map((p) => {
-            const tracks = playlistTracks(p, byId);
-            return (
-              <li key={p.id} className="xh-show">
-                <button className="show-open" onClick={() => onOpen(p.id)}>
-                  <CoverArt artId={tracks.find((t) => t.artId)?.artId ?? null} title={p.name} size="fluid" />
-                  <div className="name">{p.name}</div>
-                  <div className="note">
-                    {plural(tracks.length, "song")}
-                    {tracks.length > 0 && ` · ${formatTotal(totalSeconds(tracks))}`}
-                  </div>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+        <SongList
+          label="Liked songs"
+          tracks={tracks}
+          currentIndex={currentIndex}
+          playing={playing}
+          onPlay={onPlay}
+          onMore={(i) => onMore(tracks[i])}
+        />
       )}
     </section>
   );
