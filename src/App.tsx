@@ -235,7 +235,7 @@ export default function App() {
             </div>
           </section>
         ) : !loaded ? null : view.kind === "songs" ? (
-          <Songs onMore={(t) => openMenu(t, { kind: "library" })} onAdd={() => navigate({ kind: "add" })} />
+          <Songs onMore={(t) => openMenu(t, { kind: "library" })} onAdd={() => navigate({ kind: "add" })} onToast={showToast} />
         ) : view.kind === "albums" ? (
           <Albums onOpen={(key) => navigate({ kind: "album", key })} onAdd={() => navigate({ kind: "add" })} />
         ) : view.kind === "album" ? (
@@ -257,6 +257,7 @@ export default function App() {
             onBack={() => navigate({ kind: "artists" })}
             onOpenAlbum={(key) => navigate({ kind: "album", key })}
             onMore={(t) => openMenu(t, { kind: "library" })}
+            onToast={showToast}
           />
         ) : view.kind === "playlists" ? (
           <Playlists onOpen={(id) => navigate({ kind: "playlist", id })} onOpenLiked={() => navigate({ kind: "liked" })} />

@@ -287,35 +287,35 @@ export function patchTrack(id: string, patch: Partial<Omit<Track, "id">>, extra:
   });
 }
 
-// Memory first, so a tap shows at once and quick changes build on each other. The queued write saves whatever
+type TrackPatch = Partial<Omit<Track, "id">>;
+
+// Memory first, so a tap shows at once and quick changes build on each other. One queued write saves whatever
 // memory holds by then; if it fails, memory goes back to what storage has.
-export function updateTrack(
-  id: string,
-  patch: Partial<Omit<Track, "id">>,
-  options: { now?: boolean; failure?: string } = {},
-): Promise<boolean> {
-  const current = store.get(id);
-  if (!current) return Promise.resolve(false);
-  putTrack({ ...current, ...patch });
+export function updateTracks(patches: ReadonlyMap<string, TrackPatch>, options: { now?: boolean; failure?: string } = {}): Promise<boolean> {
+  const ids = [...patches.keys()].filter((id) => store.has(id));
+  if (ids.length === 0) return Promise.resolve(false);
+  for (const id of ids) putTrack({ ...store.get(id)!, ...patches.get(id) });
   if (options.now) publish();
   else publishSoon();
   return queueTrackWrite(async () => {
-    const latest = store.get(id);
-    if (!latest) return false;
+    const latest = ids.map((id) => store.get(id)).filter((t): t is Track => t !== undefined);
+    if (latest.length === 0) return false;
     try {
-      await write([{ store: "tracks", op: "put", value: latest }]);
+      await write(latest.map((t) => ({ store: "tracks", op: "put", value: t })));
       return true;
     } catch (e) {
-      const saved = await get<Track>("tracks", id).catch(() => undefined);
-      if (saved && store.has(id)) {
-        putTrack(saved);
-        publish();
-      }
+      const saved = await Promise.all(latest.map((t) => get<Track>("tracks", t.id).catch(() => undefined)));
+      saved.forEach((t) => t && store.has(t.id) && putTrack(t));
+      publish();
       if (options.failure) reportError(options.failure, e);
-      else console.error("Couldn't update song", e);
+      else console.error("Couldn't update songs", e);
       return false;
     }
   });
+}
+
+export function updateTrack(id: string, patch: TrackPatch, options: { now?: boolean; failure?: string } = {}): Promise<boolean> {
+  return updateTracks(new Map([[id, patch]]), options);
 }
 
 export async function recordPlay(id: string): Promise<void> {
@@ -333,6 +333,12 @@ export async function toggleLike(id: string): Promise<void> {
     { likedAt: liked ? Date.now() : undefined },
     { now: true, failure: liked ? "Couldn't like the song." : "Couldn't unlike the song." },
   );
+}
+
+// Sets each song's likedAt, so a bulk unlike can be undone with the times it had.
+export async function setLikes(likes: ReadonlyMap<string, number | undefined>): Promise<void> {
+  const patches = new Map([...likes].map(([id, likedAt]) => [id, { likedAt }]));
+  await updateTracks(patches, { now: true, failure: "Couldn't save the change to your likes." });
 }
 
 export function removeTracks(ids: ReadonlySet<string>): Promise<void> {

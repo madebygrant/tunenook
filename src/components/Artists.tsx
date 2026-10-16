@@ -3,10 +3,12 @@ import { formatTotal, plural } from "../lib/format";
 import { totalSeconds, useArtists } from "../lib/library";
 import { playTracks } from "../lib/player";
 import { searchWords, useListPlayback } from "../lib/useListPlayback";
+import { useSelection } from "../lib/useSelection";
 import type { Album, Track } from "../lib/types";
 import { ArrowLeftIcon, PlayIcon, ShuffleIcon } from "./icons";
 import { AlbumTile } from "./Albums";
 import { SearchField } from "./SearchField";
+import { SelectButton, SelectionBar } from "./Selection";
 import { SongList } from "./SongList";
 import { Button, CoverArt } from "./ui";
 
@@ -67,15 +69,18 @@ export function ArtistPage({
   onBack,
   onOpenAlbum,
   onMore,
+  onToast,
 }: {
   artistKey: string;
   onBack: () => void;
   onOpenAlbum: (key: string) => void;
   onMore: (track: Track) => void;
+  onToast: (message: string) => void;
 }) {
   const artist = useArtists().find((a) => a.key === artistKey);
   const songs = artist?.songs ?? [];
   const { currentIndex, playing, onPlay } = useListPlayback(songs);
+  const selection = useSelection(songs);
 
   if (!artist) {
     return (
@@ -127,7 +132,11 @@ export function ArtistPage({
       )}
       {songs.length > 0 && (
         <>
-          <h2 className="h3 section-title">{artist.albums.length ? "Other songs" : "Songs"}</h2>
+          <div className="section-head">
+            <h2 className="h3 section-title">{artist.albums.length ? "Other songs" : "Songs"}</h2>
+            {!selection.active && <SelectButton selection={selection} small />}
+          </div>
+          {selection.active && <SelectionBar selection={selection} tracks={songs} removal={{ kind: "library" }} onToast={onToast} />}
           <SongList
             label={`${artist.name} songs`}
             tracks={songs}
@@ -135,6 +144,7 @@ export function ArtistPage({
             playing={playing}
             onPlay={onPlay}
             onMore={(i) => onMore(songs[i])}
+            selection={selection}
           />
         </>
       )}

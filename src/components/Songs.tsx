@@ -3,9 +3,11 @@ import { compareText, plural } from "../lib/format";
 import { useTracks } from "../lib/library";
 import { playTracks } from "../lib/player";
 import { matchesSearch, searchWords, useListPlayback } from "../lib/useListPlayback";
+import { useSelection } from "../lib/useSelection";
 import type { Track } from "../lib/types";
 import { PlayIcon, ShuffleIcon } from "./icons";
 import { SearchField } from "./SearchField";
+import { SelectableActions, SelectButton } from "./Selection";
 import { SongList } from "./SongList";
 import { Button } from "./ui";
 
@@ -50,7 +52,15 @@ function loadSort(): Sort {
   }
 }
 
-export function Songs({ onMore, onAdd }: { onMore: (track: Track) => void; onAdd: () => void }) {
+export function Songs({
+  onMore,
+  onAdd,
+  onToast,
+}: {
+  onMore: (track: Track) => void;
+  onAdd: () => void;
+  onToast: (message: string) => void;
+}) {
   const tracks = useTracks();
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>(loadSort);
@@ -63,6 +73,7 @@ export function Songs({ onMore, onAdd }: { onMore: (track: Track) => void; onAdd
   );
   const { currentIndex, playing, onPlay } = useListPlayback(shown);
   const ids = shown.map((t) => t.id);
+  const selection = useSelection(shown);
 
   function changeSort(next: Sort) {
     setSort(next);
@@ -92,14 +103,15 @@ export function Songs({ onMore, onAdd }: { onMore: (track: Track) => void; onAdd
         </div>
       ) : (
         <>
-          <div className="head-actions">
+          <SelectableActions selection={selection} tracks={shown} removal={{ kind: "library" }} onToast={onToast}>
             <Button icon={<PlayIcon />} onClick={() => playTracks(ids, 0, { shuffle: false })} disabled={!ids.length}>
               Play
             </Button>
             <Button variant="secondary" icon={<ShuffleIcon />} onClick={() => playTracks(ids, -1, { shuffle: true })} disabled={!ids.length}>
               Shuffle
             </Button>
-          </div>
+            <SelectButton selection={selection} disabled={!ids.length} />
+          </SelectableActions>
           <div className="list-tools">
             <SearchField label="Search songs, artists, albums" value={query} onChange={setQuery} />
             <div className="filters" role="group" aria-label="Sort by">
@@ -120,6 +132,7 @@ export function Songs({ onMore, onAdd }: { onMore: (track: Track) => void; onAdd
               playing={playing}
               onPlay={onPlay}
               onMore={(i) => onMore(shown[i])}
+              selection={selection}
             />
           )}
         </>

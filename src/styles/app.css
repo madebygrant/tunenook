@@ -1730,6 +1730,39 @@ b.mono {
   flex: none;
   margin-right: 4px;
 }
+.songs.is-selecting {
+  user-select: none;
+}
+.song.is-selected {
+  background: var(--lamp-wash);
+}
+.song-check {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin: 0 8px;
+  border: 1.5px solid var(--border-strong);
+  color: var(--canvas);
+}
+.song.is-selected .song-check {
+  border-color: var(--lamp);
+  background: var(--lamp);
+}
+.song-check svg {
+  width: 14px;
+  height: 14px;
+}
+.selection-bar {
+  gap: 8px;
+}
+.selection-count {
+  margin-right: 8px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-muted);
+}
 .song-more svg {
   width: 16px;
   height: 16px;

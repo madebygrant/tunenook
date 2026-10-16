@@ -18,9 +18,16 @@ export function missingFrom(p: Playlist, ids: string[]): string[] {
   return ids.filter((id) => !has.has(id));
 }
 
-export function withoutIndex(p: Playlist, index: number, now: number): Playlist {
-  if (index < 0 || index >= p.trackIds.length) return p;
-  return { ...p, trackIds: p.trackIds.filter((_, i) => i !== index), updatedAt: now };
+export function withoutIndexes(p: Playlist, indexes: ReadonlySet<number>, now: number): Playlist {
+  const trackIds = p.trackIds.filter((_, i) => !indexes.has(i));
+  return trackIds.length === p.trackIds.length ? p : { ...p, trackIds, updatedAt: now };
+}
+
+// Puts removed entries back at their old positions, keeping anything added since; used to undo a removal.
+export function withInserted(p: Playlist, entries: [index: number, id: string][], now: number): Playlist {
+  const trackIds = [...p.trackIds];
+  for (const [index, id] of [...entries].sort((a, b) => a[0] - b[0])) trackIds.splice(Math.min(index, trackIds.length), 0, id);
+  return { ...p, trackIds, updatedAt: now };
 }
 
 export function withoutTracks(p: Playlist, ids: ReadonlySet<string>, now: number): Playlist {

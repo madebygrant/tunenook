@@ -1,10 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { plural } from "../lib/format";
 import { useTrackMap } from "../lib/library";
-import { clearUpNext, jumpTo, toggle, useNowPlaying, useQueue } from "../lib/player";
+import { clearUpNext, jumpTo, removeFromQueue, toggle, useNowPlaying, useQueue } from "../lib/player";
 import { idAt } from "../lib/queue";
+import { useSelection } from "../lib/useSelection";
 import type { Track } from "../lib/types";
 import { PlusIcon } from "./icons";
+import { SelectableActions, SelectButton } from "./Selection";
 import { MenuSheet, PlaylistPicker } from "./SongMenu";
 import { SongList } from "./SongList";
 import { Button } from "./ui";
@@ -27,11 +29,27 @@ export function Queue({
     [queue, byId],
   );
   const current = rows.filter((r) => r.pos === queue.at);
-  const upNext = rows.filter((r) => r.pos > queue.at);
+  const upNext = useMemo(() => rows.filter((r) => r.pos > queue.at), [rows, queue.at]);
   const [saving, setSaving] = useState(false);
   // With repeat all the queue loops, so the songs before the current one play after it.
   const before = queue.repeat === "all" ? rows.filter((r) => r.pos < queue.at) : [];
   const saveIds = [...current, ...upNext, ...before].map((r) => r.track.id);
+  const upNextTracks = useMemo(() => upNext.map((r) => r.track), [upNext]);
+  // A row is its slot in the queue's song list, which stays put as playback moves on, so a repeated song's
+  // copies can't swap places in the selection. The slot count changes on any add or remove, which clears it.
+  const slots = useMemo(() => upNext.map((r) => `${queue.ids.length}:${queue.order[r.pos]}`), [upNext, queue]);
+  // Only Up next is selectable; the playing song has its own menu.
+  const selection = useSelection(upNextTracks, slots);
+  const { active: selecting, stop: stopSelecting } = selection;
+
+  useEffect(() => {
+    if (selecting && upNext.length === 0) stopSelecting();
+  }, [selecting, upNext.length, stopSelecting]);
+
+  function removeSelected(indexes: number[]) {
+    removeFromQueue(indexes.map((i) => upNext[i].pos));
+    onToast(`Removed ${plural(indexes.length, "song")} from the queue.`);
+  }
 
   return (
     <section aria-labelledby="queue-title">
@@ -44,11 +62,17 @@ export function Queue({
         <p className="lead muted">Nothing is queued. Play a song, album or playlist to start.</p>
       ) : (
         <>
-          <div className="head-actions">
+          <SelectableActions
+            selection={selection}
+            tracks={upNextTracks}
+            removal={{ kind: "custom", label: "Remove from queue", run: removeSelected }}
+            onToast={onToast}
+          >
             <Button variant="secondary" icon={<PlusIcon />} onClick={() => setSaving(true)}>
               Save as playlist
             </Button>
-          </div>
+            <SelectButton selection={selection} disabled={!upNext.length} />
+          </SelectableActions>
           {saving && (
             <MenuSheet label="Save queue as a playlist" title="Save queue" subtitle={plural(saveIds.length, "song")} onClose={() => setSaving(false)}>
               <PlaylistPicker
@@ -86,11 +110,12 @@ export function Queue({
           ) : (
             <SongList
               label="Up next"
-              tracks={upNext.map((r) => r.track)}
+              tracks={upNextTracks}
               currentIndex={null}
               playing={false}
               onPlay={(i) => jumpTo(upNext[i].pos)}
               onMore={(i) => onMore(upNext[i].track, upNext[i].pos)}
+              selection={selection}
             />
           )}
         </>

@@ -103,6 +103,15 @@ describe("plays and likes", () => {
     expect(await db.get("files", "a")).toBeUndefined();
   });
 
+  it("saves a bulk unlike in one write", async () => {
+    const { library } = await load();
+    for (const id of ["a", "b", "c"]) await library.addTrack({ track: makeTrack(id, { likedAt: 1 }) });
+    const writes = vi.spyOn(await import("./db"), "write");
+    await library.setLikes(new Map([["a", undefined], ["b", undefined], ["c", undefined]]));
+    expect(writes).toHaveBeenCalledTimes(1);
+    expect(["a", "b", "c"].map((id) => library.getTrack(id)?.likedAt)).toEqual([undefined, undefined, undefined]);
+  });
+
   it("puts a like back and reports it when the write fails", async () => {
     const { library } = await load();
     await library.addTrack({ track: makeTrack("a") });

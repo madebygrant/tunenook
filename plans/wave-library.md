@@ -34,7 +34,7 @@ Items:
 
 Exit criterion: standard check passes. Adding an album to a new playlist from the album page puts every song in it in track order.
 
-## Wave 3: multi-select
+## Wave 3: multi-select [done 2026-10-16]
 
 Goal: bulk edits without one menu trip per song.
 

@@ -3,9 +3,11 @@ import { formatTotal, plural } from "../lib/format";
 import { totalSeconds, useAlbums } from "../lib/library";
 import { playTracks } from "../lib/player";
 import { matchesSearch, searchWords, useListPlayback } from "../lib/useListPlayback";
+import { useSelection } from "../lib/useSelection";
 import type { Album, Track } from "../lib/types";
 import { ArrowLeftIcon, MoreIcon, PlayIcon, ShuffleIcon } from "./icons";
 import { SearchField } from "./SearchField";
+import { SelectableActions, SelectButton } from "./Selection";
 import { CollectionMenu } from "./SongMenu";
 import { SongList } from "./SongList";
 import { Button, CoverArt } from "./ui";
@@ -77,6 +79,7 @@ export function AlbumPage({
   const tracks = album?.tracks ?? [];
   const { currentIndex, playing, onPlay } = useListPlayback(tracks);
   const [menuOpen, setMenuOpen] = useState(false);
+  const selection = useSelection(tracks);
   const ids = tracks.map((t) => t.id);
 
   if (!album) {
@@ -108,15 +111,16 @@ export function AlbumPage({
           <div className="count">
             {plural(tracks.length, "song")} · {formatTotal(totalSeconds(tracks))}
           </div>
-          <div className="head-actions">
+          <SelectableActions selection={selection} tracks={tracks} removal={{ kind: "library" }} onToast={onToast}>
             <Button icon={<PlayIcon />} onClick={() => playTracks(ids, 0, { shuffle: false })}>
               Play
             </Button>
             <Button variant="secondary" icon={<ShuffleIcon />} onClick={() => playTracks(ids, -1, { shuffle: true })}>
               Shuffle
             </Button>
+            <SelectButton selection={selection} />
             <Button variant="ghost" icon={<MoreIcon />} aria-label={`More for ${album.title}`} onClick={() => setMenuOpen(true)} />
-          </div>
+          </SelectableActions>
         </div>
       </div>
       {menuOpen && (
@@ -137,6 +141,7 @@ export function AlbumPage({
         playing={playing}
         onPlay={onPlay}
         onMore={(i) => onMore(tracks[i])}
+        selection={selection}
       />
     </section>
   );

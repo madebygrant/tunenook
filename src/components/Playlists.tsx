@@ -1,12 +1,15 @@
 import { useMemo, useState } from "react";
 import { formatTotal, plural } from "../lib/format";
-import { addToPlaylist, createPlaylist, deletePlaylist, renamePlaylist, savePlaylist, totalSeconds, useLikedTracks, usePlaylists, useTrackMap, useTracks } from "../lib/library";
+import { addToPlaylist, createPlaylist, deletePlaylist, getPlaylists, renamePlaylist, savePlaylist, setLikes, totalSeconds, useLikedTracks, usePlaylists, useTrackMap, useTracks } from "../lib/library";
 import { playTracks } from "../lib/player";
 import { matchesSearch, searchWords, useListPlayback } from "../lib/useListPlayback";
+import { withInserted, withoutIndexes } from "../lib/playlists";
+import { useSelection } from "../lib/useSelection";
 import type { Playlist, Track } from "../lib/types";
 import { Dialog } from "./Dialog";
 import { ArrowLeftIcon, CheckIcon, CloseIcon, MoreIcon, PencilIcon, PlayIcon, PlusIcon, ShuffleIcon, TrashIcon } from "./icons";
 import { SearchField } from "./SearchField";
+import { SelectableActions, SelectButton } from "./Selection";
 import { SongList } from "./SongList";
 import { CollectionMenu, Confirm } from "./SongMenu";
 import { Button, CoverArt, TextField } from "./ui";
@@ -87,12 +90,20 @@ export function LikedPage({
 }: {
   onBack: () => void;
   onMore: (track: Track) => void;
-  onToast: (message: string) => void;
+  onToast: (message: string, undo?: () => void) => void;
 }) {
   const tracks = useLikedTracks();
   const { currentIndex, playing, onPlay } = useListPlayback(tracks);
   const [menuOpen, setMenuOpen] = useState(false);
+  const selection = useSelection(tracks);
   const ids = tracks.map((t) => t.id);
+
+  function unlike(indexes: number[]) {
+    const chosen = indexes.map((i) => tracks[i]);
+    const before = new Map(chosen.map((t) => [t.id, t.likedAt]));
+    void setLikes(new Map(chosen.map((t) => [t.id, undefined])));
+    onToast(`Unliked ${plural(chosen.length, "song")}.`, () => void setLikes(before));
+  }
 
   return (
     <section aria-labelledby="liked-title">
@@ -109,15 +120,16 @@ export function LikedPage({
             {plural(tracks.length, "song")}
             {tracks.length > 0 && ` · ${formatTotal(totalSeconds(tracks))}`}
           </div>
-          <div className="head-actions">
+          <SelectableActions selection={selection} tracks={tracks} removal={{ kind: "custom", label: "Unlike", run: unlike }} onToast={onToast}>
             <Button icon={<PlayIcon />} disabled={!ids.length} onClick={() => playTracks(ids, 0, { shuffle: false })}>
               Play
             </Button>
             <Button variant="secondary" icon={<ShuffleIcon />} disabled={!ids.length} onClick={() => playTracks(ids, -1, { shuffle: true })}>
               Shuffle
             </Button>
+            <SelectButton selection={selection} disabled={!ids.length} />
             <Button variant="ghost" icon={<MoreIcon />} aria-label="More for Liked songs" disabled={!ids.length} onClick={() => setMenuOpen(true)} />
-          </div>
+          </SelectableActions>
         </div>
       </div>
       {menuOpen && (
@@ -139,6 +151,7 @@ export function LikedPage({
           playing={playing}
           onPlay={onPlay}
           onMore={(i) => onMore(tracks[i])}
+          selection={selection}
         />
       )}
     </section>
@@ -164,6 +177,12 @@ export function PlaylistPage({
   const [adding, setAdding] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const selection = useSelection(tracks);
+  // Rows skip ids whose song has left the library, so row i isn't always playlist position i.
+  const positions = useMemo(
+    () => (playlist ? playlist.trackIds.flatMap((trackId, at) => (byId.has(trackId) ? [at] : [])) : []),
+    [playlist, byId],
+  );
 
   if (!playlist) {
     return (
@@ -176,6 +195,17 @@ export function PlaylistPage({
     );
   }
   const ids = tracks.map((t) => t.id);
+  const current = playlist;
+
+  function removeRows(indexes: number[]) {
+    const removed = indexes.map((i): [number, string] => [positions[i], current.trackIds[positions[i]]]);
+    void savePlaylist(withoutIndexes(current, new Set(removed.map(([at]) => at)), Date.now()));
+    // Undo puts back only these songs, so anything added to the playlist since stays.
+    onToast(`Removed ${plural(indexes.length, "song")} from ${current.name}.`, () => {
+      const latest = getPlaylists().find((p) => p.id === current.id);
+      if (latest) void savePlaylist(withInserted(latest, removed, Date.now()));
+    });
+  }
 
   return (
     <section aria-labelledby="playlist-title">
@@ -216,7 +246,7 @@ export function PlaylistPage({
             {plural(tracks.length, "song")}
             {tracks.length > 0 && ` · ${formatTotal(totalSeconds(tracks))}`}
           </div>
-          <div className="head-actions">
+          <SelectableActions selection={selection} tracks={tracks} removal={{ kind: "custom", label: "Remove from playlist", run: removeRows }} onToast={onToast}>
             <Button icon={<PlayIcon />} disabled={!ids.length} onClick={() => playTracks(ids, 0, { shuffle: false })}>
               Play
             </Button>
@@ -226,6 +256,7 @@ export function PlaylistPage({
             <Button variant="secondary" icon={<PlusIcon />} onClick={() => setAdding(true)}>
               Add songs
             </Button>
+            <SelectButton selection={selection} disabled={!ids.length} />
             <Button
               variant="ghost"
               icon={<MoreIcon />}
@@ -239,7 +270,7 @@ export function PlaylistPage({
             <Button variant="ghost" icon={<TrashIcon />} onClick={() => setConfirming(true)}>
               Delete
             </Button>
-          </div>
+          </SelectableActions>
         </div>
       </div>
       {tracks.length === 0 ? (
@@ -251,7 +282,8 @@ export function PlaylistPage({
           currentIndex={currentIndex}
           playing={playing}
           onPlay={onPlay}
-          onMore={(i) => onMore(tracks[i], playlist.trackIds.indexOf(tracks[i].id, i))}
+          onMore={(i) => onMore(tracks[i], positions[i])}
+          selection={selection}
         />
       )}
       {adding && <AddSongs playlist={playlist} onClose={() => setAdding(false)} />}

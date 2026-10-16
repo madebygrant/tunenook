@@ -3,7 +3,8 @@ import { plural } from "../lib/format";
 import { canLinkFolders, copyIntoLibrary, NeedsAccessError, requestAccess } from "../lib/folders";
 import { addToPlaylist, artistPageFor, createPlaylist, toggleLike, getPlaylists, removeTracksSafely, savePlaylist, usePlaylists } from "../lib/library";
 import { addToQueue, playNext, removeFromQueue } from "../lib/player";
-import { missingFrom, moved, withoutIndex } from "../lib/playlists";
+import { missingFrom, moved, withoutIndexes } from "../lib/playlists";
+import { libraryRemovalMessage } from "../lib/removal";
 import { albumKey } from "../lib/tags";
 import type { Playlist, Track } from "../lib/types";
 import { Dialog } from "./Dialog";
@@ -87,11 +88,11 @@ export function SongMenu({ target, onClose, onNavigate, onToast }: Props) {
     items.push({
       label: "Remove from playlist",
       danger: true,
-      run: () => editPlaylist((p) => withoutIndex(p, index, now), `Removed ${track.title} from ${playlist.name}.`),
+      run: () => editPlaylist((p) => withoutIndexes(p, new Set([index]), now), `Removed ${track.title} from ${playlist.name}.`),
     });
   }
   if (context.kind === "queue") {
-    items.push({ label: "Remove from queue", danger: true, run: () => run(() => removeFromQueue(context.pos)) });
+    items.push({ label: "Remove from queue", danger: true, run: () => run(() => removeFromQueue([context.pos])) });
   }
   if (canLinkFolders && track.source.kind === "linked") items.push({ label: "Copy into TuneNook", run: () => void copy() });
   if (context.kind === "library") items.push({ label: "Remove from library…", danger: true, run: () => setStep("confirm") });
@@ -102,11 +103,7 @@ export function SongMenu({ target, onClose, onNavigate, onToast }: Props) {
       {step === "pick" && <PlaylistPicker ids={[track.id]} name={track.title} onDone={(message) => run(() => {}, message)} />}
       {step === "confirm" && (
         <Confirm
-          message={
-            track.source.kind === "linked"
-              ? "This removes the song from TuneNook and its playlists. The file in your folder stays."
-              : "This deletes TuneNook's copy of the song and removes it from every playlist. The original file isn't touched."
-          }
+          message={libraryRemovalMessage([track])}
           action="Remove song"
           onConfirm={() => run(() => void removeTracksSafely(new Set([track.id])), `Removed ${track.title}.`)}
           onCancel={() => setStep("actions")}
@@ -191,12 +188,12 @@ export function PlaylistPicker({
   function addTo(p: Playlist) {
     // A single song may repeat in a playlist, as before; a whole collection only fills in what's missing.
     const adding = ids.length === 1 ? ids : missingFrom(p, ids);
-    if (adding.length === 0) return onDone(`${p.name} already has every song in ${name}.`);
+    if (adding.length === 0) return onDone(`${p.name} already has every song.`);
     void addToPlaylist(p.id, adding);
     const skipped = ids.length - adding.length;
     if (!skipped) return onDone(`Added ${name} to ${p.name}.`);
     const already = skipped === 1 ? "1 was already in it" : `${skipped} were already in it`;
-    onDone(`Added ${plural(adding.length, "song")} from ${name} to ${p.name}. ${already}.`);
+    onDone(`Added ${plural(adding.length, "song")} to ${p.name}. ${already}.`);
   }
 
   return (

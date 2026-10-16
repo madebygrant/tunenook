@@ -384,8 +384,8 @@ export function jumpTo(at: number): void {
   load(true);
 }
 
-export function removeFromQueue(at: number): void {
-  applyRemoval(removePositions(queue, new Set([at])));
+export function removeFromQueue(positions: number[]): void {
+  applyRemoval(removePositions(queue, new Set(positions)));
 }
 
 export function clearUpNext(): void {
