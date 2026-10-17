@@ -68,10 +68,10 @@ export function Queue({
             removal={{ kind: "custom", label: "Remove from queue", run: removeSelected }}
             onToast={onToast}
           >
-            <Button variant="secondary" icon={<PlusIcon />} onClick={() => setSaving(true)}>
+            <Button small variant="secondary" icon={<PlusIcon />} onClick={() => setSaving(true)}>
               Save as playlist
             </Button>
-            <SelectButton selection={selection} disabled={!upNext.length} />
+            <SelectButton small selection={selection} disabled={!upNext.length} />
           </SelectableActions>
           {saving && (
             <MenuSheet label="Save queue as a playlist" title="Save queue" subtitle={plural(saveIds.length, "song")} onClose={() => setSaving(false)}>

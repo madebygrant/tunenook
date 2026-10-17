@@ -109,13 +109,13 @@ export function Songs({
       ) : (
         <>
           <SelectableActions selection={selection} tracks={shown} removal={{ kind: "library" }} onToast={onToast}>
-            <Button icon={<PlayIcon />} onClick={() => playTracks(ids, 0, { shuffle: false })} disabled={!ids.length}>
+            <Button small icon={<PlayIcon />} onClick={() => playTracks(ids, 0, { shuffle: false })} disabled={!ids.length}>
               Play
             </Button>
-            <Button variant="secondary" icon={<ShuffleIcon />} onClick={() => playTracks(ids, -1, { shuffle: true })} disabled={!ids.length}>
+            <Button small variant="secondary" icon={<ShuffleIcon />} onClick={() => playTracks(ids, -1, { shuffle: true })} disabled={!ids.length}>
               Shuffle
             </Button>
-            <SelectButton selection={selection} disabled={!ids.length} />
+            <SelectButton small selection={selection} disabled={!ids.length} />
           </SelectableActions>
           <div className="list-tools">
             <SearchField label="Search songs, artists, albums" value={query} onChange={setQuery} />

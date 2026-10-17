@@ -109,10 +109,10 @@ export function ArtistPage({
             {counts(artist.albums.length, artist.tracks.length)} · {formatTotal(totalSeconds(artist.tracks))}
           </div>
           <div className="head-actions">
-            <Button icon={<PlayIcon />} onClick={() => playTracks(ids, 0, { shuffle: false })}>
+            <Button small icon={<PlayIcon />} onClick={() => playTracks(ids, 0, { shuffle: false })}>
               Play
             </Button>
-            <Button variant="secondary" icon={<ShuffleIcon />} onClick={() => playTracks(ids, -1, { shuffle: true })}>
+            <Button small variant="secondary" icon={<ShuffleIcon />} onClick={() => playTracks(ids, -1, { shuffle: true })}>
               Shuffle
             </Button>
           </div>

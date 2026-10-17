@@ -124,14 +124,14 @@ export function LikedPage({
             {tracks.length > 0 && ` · ${formatTotal(totalSeconds(tracks))}`}
           </div>
           <SelectableActions selection={selection} tracks={tracks} removal={{ kind: "custom", label: "Unlike", run: unlike }} onToast={onToast}>
-            <Button icon={<PlayIcon />} disabled={!ids.length} onClick={() => playTracks(ids, 0, { shuffle: false })}>
+            <Button small icon={<PlayIcon />} disabled={!ids.length} onClick={() => playTracks(ids, 0, { shuffle: false })}>
               Play
             </Button>
-            <Button variant="secondary" icon={<ShuffleIcon />} disabled={!ids.length} onClick={() => playTracks(ids, -1, { shuffle: true })}>
+            <Button small variant="secondary" icon={<ShuffleIcon />} disabled={!ids.length} onClick={() => playTracks(ids, -1, { shuffle: true })}>
               Shuffle
             </Button>
-            <SelectButton selection={selection} disabled={!ids.length} />
-            <Button variant="ghost" icon={<MoreIcon />} aria-label="More for Liked songs" disabled={!ids.length} onClick={() => setMenuOpen(true)} />
+            <SelectButton small selection={selection} disabled={!ids.length} />
+            <Button small variant="ghost" icon={<MoreIcon />} aria-label="More for Liked songs" disabled={!ids.length} onClick={() => setMenuOpen(true)} />
           </SelectableActions>
         </div>
       </div>
@@ -247,27 +247,28 @@ export function PlaylistPage({
             {tracks.length > 0 && ` · ${formatTotal(totalSeconds(tracks))}`}
           </div>
           <SelectableActions selection={selection} tracks={tracks} removal={{ kind: "custom", label: "Remove from playlist", run: removeRows }} onToast={onToast}>
-            <Button icon={<PlayIcon />} disabled={!ids.length} onClick={() => playTracks(ids, 0, { shuffle: false })}>
+            <Button small icon={<PlayIcon />} disabled={!ids.length} onClick={() => playTracks(ids, 0, { shuffle: false })}>
               Play
             </Button>
-            <Button variant="secondary" icon={<ShuffleIcon />} disabled={!ids.length} onClick={() => playTracks(ids, -1, { shuffle: true })}>
+            <Button small variant="secondary" icon={<ShuffleIcon />} disabled={!ids.length} onClick={() => playTracks(ids, -1, { shuffle: true })}>
               Shuffle
             </Button>
-            <Button variant="secondary" icon={<PlusIcon />} onClick={() => setAdding(true)}>
+            <Button small variant="secondary" icon={<PlusIcon />} onClick={() => setAdding(true)}>
               Add songs
             </Button>
-            <SelectButton selection={selection} disabled={!ids.length} />
+            <SelectButton small selection={selection} disabled={!ids.length} />
             <Button
+              small
               variant="ghost"
               icon={<MoreIcon />}
               aria-label={`More for ${playlist.name}`}
               disabled={!ids.length}
               onClick={() => setMenuOpen(true)}
             />
-            <Button variant="ghost" icon={<PencilIcon />} onClick={() => setRenaming(playlist.name)}>
+            <Button small variant="ghost" icon={<PencilIcon />} onClick={() => setRenaming(playlist.name)}>
               Rename
             </Button>
-            <Button variant="ghost" icon={<TrashIcon />} onClick={() => setConfirming(true)}>
+            <Button small variant="ghost" icon={<TrashIcon />} onClick={() => setConfirming(true)}>
               Delete
             </Button>
           </SelectableActions>

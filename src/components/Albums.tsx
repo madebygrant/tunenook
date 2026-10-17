@@ -148,14 +148,14 @@ export function AlbumPage({
             {plural(tracks.length, "song")} · {formatTotal(totalSeconds(tracks))}
           </div>
           <SelectableActions selection={selection} tracks={tracks} removal={{ kind: "library" }} onToast={onToast}>
-            <Button icon={<PlayIcon />} onClick={() => playTracks(ids, 0, { shuffle: false })}>
+            <Button small icon={<PlayIcon />} onClick={() => playTracks(ids, 0, { shuffle: false })}>
               Play
             </Button>
-            <Button variant="secondary" icon={<ShuffleIcon />} onClick={() => playTracks(ids, -1, { shuffle: true })}>
+            <Button small variant="secondary" icon={<ShuffleIcon />} onClick={() => playTracks(ids, -1, { shuffle: true })}>
               Shuffle
             </Button>
-            <SelectButton selection={selection} />
-            <Button variant="ghost" icon={<MoreIcon />} aria-label={`More for ${album.title}`} onClick={() => setMenuOpen(true)} />
+            <SelectButton small selection={selection} />
+            <Button small variant="ghost" icon={<MoreIcon />} aria-label={`More for ${album.title}`} onClick={() => setMenuOpen(true)} />
           </SelectableActions>
         </div>
       </div>
