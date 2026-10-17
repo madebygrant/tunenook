@@ -86,14 +86,16 @@ function SleepTimerControl() {
               {minutes} min
             </Button>
           ))}
-          <Button variant="secondary" small aria-pressed={sleep?.kind === "song"} onClick={() => choose("song")}>
-            End of this song
-          </Button>
-          {sleep && (
-            <Button variant="ghost" small onClick={() => choose(null)}>
-              Turn off
+          <div className="sleep-extras">
+            <Button variant="secondary" small aria-pressed={sleep?.kind === "song"} onClick={() => choose("song")}>
+              End of this song
             </Button>
-          )}
+            {sleep && (
+              <Button variant="ghost" small onClick={() => choose(null)}>
+                Turn off
+              </Button>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -308,24 +310,26 @@ export function Player({ onNavigate }: { onNavigate: (view: View) => void }) {
             <CloseIcon />
           </button>
           <CoverArt artId={track.artId} title={track.album || track.title} size={240} />
-          <div className="sheet-title">{track.title}</div>
-          {muted && <div className="muted">Muted. Press M to unmute.</div>}
-          <div className="sheet-links">
-            {artistView ? (
-              <button className="show-link" onClick={() => go(artistView)}>
-                {track.artist}
-              </button>
-            ) : (
-              <span>{track.artist}</span>
-            )}
-            {albumView && (
-              <>
-                <span aria-hidden="true">·</span>
-                <button className="show-link" onClick={() => go(albumView)}>
-                  {track.album}
+          <div className="sheet-head">
+            <div className="sheet-title">{track.title}</div>
+            {muted && <div className="muted">Muted. Press M to unmute.</div>}
+            <div className="sheet-links">
+              {artistView ? (
+                <button className="show-link" onClick={() => go(artistView)}>
+                  {track.artist}
                 </button>
-              </>
-            )}
+              ) : (
+                <span>{track.artist}</span>
+              )}
+              {albumView && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <button className="show-link" onClick={() => go(albumView)}>
+                    {track.album}
+                  </button>
+                </>
+              )}
+            </div>
           </div>
           {seekRow(false)}
           <div className="sheet-controls">

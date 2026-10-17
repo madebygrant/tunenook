@@ -799,6 +799,47 @@ mark {
 .filter[aria-pressed="true"]::after {
   background: var(--lamp);
 }
+.sort-choose {
+  display: none;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color var(--slow) var(--ease);
+}
+.sort-choose .ord {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.sort-choose .value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.sort-choose svg {
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted);
+}
+.sort-choose:hover {
+  border-color: var(--text-muted);
+}
+.menu-pick {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--text);
+}
 .ep-empty {
   padding: 24px 0;
 }
@@ -1233,6 +1274,17 @@ mark {
   justify-content: center;
   gap: 24px;
 }
+/* The sheet renders in a portal outside .xh-player, so it needs its own modes rule. */
+.player-sheet .modes {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+}
+.player-sheet .sheet-head {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+}
 .player-sheet .xh-transport {
   gap: 16px;
 }
@@ -1251,7 +1303,18 @@ mark {
   .player-sheet {
     width: 100%;
     box-sizing: border-box;
-    padding: 20px 20px 28px;
+    padding: 20px 20px max(28px, env(safe-area-inset-bottom, 0px));
+  }
+  .player-sheet .xh-art {
+    width: min(200px, 26vh);
+    height: min(200px, 26vh);
+  }
+  .player-sheet .sheet-controls {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .player-sheet .modes {
+    gap: 32px;
   }
 }
 .dialog-head {
@@ -1515,7 +1578,19 @@ kbd {
 }
 @media (max-width: 640px) {
   .show-head {
-    gap: 16px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0 16px;
+  }
+  .show-head > div:last-child {
+    display: contents;
+  }
+  .show-head > div:last-child > :not(.head-actions) {
+    grid-column: 2;
+  }
+  .show-head .head-actions {
+    grid-column: 1 / -1;
+    gap: 8px 12px;
   }
   .show-head .xh-art {
     --s: 72px;
@@ -1542,6 +1617,21 @@ kbd {
   .xh-ep.is-current {
     padding-left: 14px;
     padding-right: 10px;
+  }
+  .list-tools {
+    gap: 12px;
+    padding: 12px 0 12px;
+  }
+  .list-tools .xh-search {
+    flex-basis: 100%;
+    max-width: none;
+    margin-right: auto;
+  }
+  .filters {
+    display: none;
+  }
+  .sort-choose {
+    display: flex;
   }
 }
 @media (max-width: 400px) {
@@ -2130,8 +2220,14 @@ b.mono {
   height: 18px;
 }
 .sleep-options {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  width: 100%;
+}
+.sleep-extras {
+  grid-column: 1 / -1;
   display: flex;
-  flex-wrap: wrap;
   justify-content: center;
   gap: 8px;
 }

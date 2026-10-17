@@ -5,8 +5,9 @@ import { playTracks } from "../lib/player";
 import { matchesSearch, searchWords, useListPlayback } from "../lib/useListPlayback";
 import { useSelection } from "../lib/useSelection";
 import type { Track } from "../lib/types";
-import { PlayIcon, ShuffleIcon } from "./icons";
+import { CheckIcon, ChevronDownIcon, PlayIcon, ShuffleIcon } from "./icons";
 import { SearchField } from "./SearchField";
+import { MenuSheet } from "./SongMenu";
 import { SelectableActions, SelectButton } from "./Selection";
 import { SongList } from "./SongList";
 import { Button } from "./ui";
@@ -64,6 +65,8 @@ export function Songs({
   const tracks = useTracks();
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>(loadSort);
+  const [sortOpen, setSortOpen] = useState(false);
+  const sortValue = SORTS.find(([value]) => value === sort)?.[1] ?? "Title";
   const [stats, setStats] = useState(() => playStats(tracks));
   // Deferred, so typing stays quick while a large library filters behind it.
   const search = useDeferredValue(query);
@@ -123,6 +126,20 @@ export function Songs({
                 </button>
               ))}
             </div>
+            <button
+              type="button"
+              className="sort-choose"
+              aria-haspopup="dialog"
+              aria-expanded={sortOpen}
+              aria-label={`Sort songs, currently ${sortValue}`}
+              onClick={() => setSortOpen(true)}
+            >
+              <span className="ord">Sort</span>
+              <span className="value">
+                {sortValue}
+                <ChevronDownIcon />
+              </span>
+            </button>
           </div>
           {shown.length === 0 ? (
             <p className="list-empty muted">No songs match “{search}”.</p>
@@ -136,6 +153,27 @@ export function Songs({
               onMore={(i) => onMore(shown[i])}
               selection={selection}
             />
+          )}
+          {sortOpen && (
+            <MenuSheet label="Sort songs" title="Sort songs" subtitle="Order of the list" onClose={() => setSortOpen(false)}>
+              <ul className="menu-list">
+                {SORTS.map(([value, label]) => (
+                  <li key={value}>
+                    <button
+                      className="menu-item"
+                      aria-current={sort === value || undefined}
+                      onClick={() => {
+                        changeSort(value);
+                        setSortOpen(false);
+                      }}
+                    >
+                      {label}
+                      {sort === value && <CheckIcon className="menu-pick" />}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </MenuSheet>
           )}
         </>
       )}
