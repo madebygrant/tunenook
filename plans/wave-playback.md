@@ -18,7 +18,7 @@ Risk: iOS can't fade either, so the timer just pauses there. Check that pausing 
 
 Exit criterion: standard check passes. A sleep timer set to end of song stops playback when the song ends instead of starting the next one.
 
-## Wave 2: lyrics
+## Wave 2: lyrics [skipped 2026-10-17]
 
 Goal: show embedded lyrics.
 
@@ -32,7 +32,7 @@ Risk: lyrics can be long. Storing them on the track object means they load with 
 
 Exit criterion: standard check passes. A file with embedded lyrics shows them in the expanded player.
 
-## Wave 3: audiobooks
+## Wave 3: audiobooks [skipped 2026-10-17]
 
 Goal: `.m4b` files and long tracks behave like books, not songs.
 
@@ -49,7 +49,7 @@ Risk: changes what lock-screen Previous and Next do for these tracks. Check that
 
 Exit criterion: standard check passes. Play an `.m4b`, stop halfway through a chapter, play an album, then return to the book. It resumes where it stopped.
 
-## Wave 4: gapless playback
+## Wave 4: gapless playback [skipped 2026-10-17]
 
 Goal: no silence between tracks on albums mastered without gaps.
 
