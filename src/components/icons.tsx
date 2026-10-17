@@ -174,6 +174,12 @@ export const UploadIcon = (props: SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+export const DownloadIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 16 16" {...base} {...props}>
+    <path d="M8 2.5V11M4.5 7.5L8 11l3.5-3.5M3 13.5h10" />
+  </svg>
+);
+
 export const FolderIcon = (props: SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 16 16" {...base} {...props}>
     <path d="M1.5 3h5l1.5 2h6.5v8h-13z" />

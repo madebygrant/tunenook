@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { canLinkFolders, copyIntoLibrary, NeedsAccessError, NotEnoughSpaceError, requestAccess, scanFolder, unlinkFolder, useGranted, linkFolder } from "../lib/folders";
+import { backupToFolder, backupZip } from "../lib/backup";
+import { download } from "../lib/download";
 import { formatBytes, plural } from "../lib/format";
 import { bytesToImport, importFiles } from "../lib/importer";
 import { cancelJob, dismissJob, runJob, useJob } from "../lib/job";
@@ -10,12 +12,12 @@ import { ensurePersistence, freeBytes, useStorage } from "../lib/storage";
 import { describeImport } from "../lib/summary";
 import type { LinkedFolder } from "../lib/types";
 import { Dialog } from "./Dialog";
-import { FolderIcon, RefreshIcon, TrashIcon, UploadIcon } from "./icons";
+import { DownloadIcon, FolderIcon, RefreshIcon, TrashIcon, UploadIcon } from "./icons";
 import { InstallHint } from "./InstallHint";
 import { Confirm } from "./SongMenu";
 import { Button, Panel } from "./ui";
 
-const ACCEPT = "audio/*,.mp3,.m4a,.m4b,.aac,.flac,.wav,.aif,.aiff,.ogg,.oga,.opus,.m3u,.m3u8";
+const ACCEPT = "audio/*,.mp3,.m4a,.m4b,.aac,.flac,.wav,.aif,.aiff,.ogg,.oga,.opus,.m3u,.m3u8,.json";
 
 export function AddMusic() {
   const job = useJob();
@@ -127,6 +129,43 @@ export function AddMusic() {
             >
               Link a folder
             </Button>
+          </Panel>
+        )}
+        {tracks.length > 0 && (
+          <Panel>
+            <h2 className="h3">Back up</h2>
+            {canLinkFolders ? (
+              <p className="muted">
+                Writes the songs TuneNook holds, your playlists, and your likes, play counts and edits into a folder you pick.
+                Nothing there is overwritten, and backing up to the same folder again only adds what's new. To restore, add the
+                folder with Choose a folder.
+              </p>
+            ) : (
+              <p className="muted">
+                This browser can't write to a folder, so the backup has your playlists, likes, play counts and edits, but not the
+                songs. To restore, add your music together with the unzipped backup.
+              </p>
+            )}
+            <div className="dialog-actions">
+              {canLinkFolders ? (
+                <Button
+                  variant="secondary"
+                  icon={<FolderIcon />}
+                  disabled={job?.running}
+                  onClick={() => void runJob("Backing up", (onProgress, signal) => backupToFolder(onProgress, signal))}
+                >
+                  Back up to a folder
+                </Button>
+              ) : (
+                <Button
+                  variant="secondary"
+                  icon={<DownloadIcon />}
+                  onClick={() => download(backupZip(), `tunenook-backup-${new Date().toISOString().slice(0, 10)}.zip`)}
+                >
+                  Download backup
+                </Button>
+              )}
+            </div>
           </Panel>
         )}
         {storage && (

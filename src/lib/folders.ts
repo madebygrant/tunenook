@@ -1,7 +1,6 @@
 import { useSyncExternalStore } from "react";
-import { importItems, importPlaylists, type ImportSummary, type Progress } from "./importer";
+import { importItems, isExtraFile, type ImportSummary, type Progress } from "./importer";
 import { deleteFolder, getFolders, getTracks, patchTrack, removeTracks, saveFolder } from "./library";
-import { isPlaylistFile } from "./m3u";
 import { createListeners } from "./store";
 import { isAudioFile } from "./tags";
 import type { LinkedFolder, Track } from "./types";
@@ -96,10 +95,10 @@ export async function scanFolder(folder: LinkedFolder, onProgress: (p: Progress)
   const audio = found.filter((f) => isAudioFile({ name: f.handle.name, type: "" }) && !linkedPaths.has(f.path));
   const items = [];
   for (const f of audio) items.push({ file: await f.handle.getFile(), source: { kind: "linked" as const, folderId: folder.id, path: f.path } });
-  const summary = await importItems(items, [], onProgress, signal);
-
-  const playlists = await Promise.all(found.filter((f) => isPlaylistFile({ name: f.handle.name })).map((f) => f.handle.getFile()));
-  await importPlaylists(playlists, summary);
+  const extras = await Promise.all(
+    found.filter((f) => isExtraFile({ name: f.handle.name })).map(async (f) => ({ file: await f.handle.getFile(), path: f.path })),
+  );
+  const summary = await importItems(items, extras, onProgress, signal);
 
   const gone = linked.filter((t) => !foundPaths.has((t.source as { path: string }).path));
   await removeTracks(new Set(gone.map((t) => t.id)));

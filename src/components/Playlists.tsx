@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { formatTotal, plural } from "../lib/format";
 import { addToPlaylist, createPlaylist, deletePlaylist, getPlaylists, renamePlaylist, savePlaylist, setLikes, totalSeconds, useLikedTracks, usePlaylists, useTrackMap, useTracks } from "../lib/library";
+import { download, safeFileName } from "../lib/download";
+import { toM3u, trackPath } from "../lib/m3u";
 import { playTracks } from "../lib/player";
 import { matchesSearch, searchWords, useListPlayback } from "../lib/useListPlayback";
 import { movePlaylistRow, visiblePositions } from "../lib/playlistMoves";
@@ -292,6 +294,16 @@ export function PlaylistPage({
           subtitle={plural(ids.length, "song")}
           ids={ids}
           excludePlaylistId={playlist.id}
+          extraItems={[
+            {
+              label: "Export as .m3u8",
+              run: () => {
+                setMenuOpen(false);
+                const text = toM3u(tracks.map((t) => ({ path: trackPath(t), title: t.title, artist: t.artist, duration: t.duration })));
+                download(new Blob([text], { type: "audio/x-mpegurl" }), `${safeFileName(playlist.name)}.m3u8`);
+              },
+            },
+          ]}
           onClose={() => setMenuOpen(false)}
           onToast={onToast}
         />

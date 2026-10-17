@@ -17,7 +17,7 @@ Items:
 
 Exit criterion: standard check passes. With the test library, a Chrome performance trace of scrolling Songs on a mid-range phone emulation shows no frame over 50 ms.
 
-## Wave 2: export and backup
+## Wave 2: export and backup [done 2026-10-17]
 
 Goal: get playlists and songs back out of the app.
 

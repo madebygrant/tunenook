@@ -1,5 +1,6 @@
+import { hasPlaylist, isBackupFile, parseBackup, restoreBackup, type Backup } from "./backup";
 import { addTrack, albumCover, createPlaylist, getTracks, hasArt } from "./library";
-import { isPlaylistFile, m3uEntries, matchEntries, playlistName } from "./m3u";
+import { isPlaylistFile, m3uEntries, matchEntries, playlistName, trackPath } from "./m3u";
 import { albumKey, guessFromFileName, isAudioFile, sourceKey } from "./tags";
 import type { Track, TrackSource } from "./types";
 
@@ -13,6 +14,8 @@ export interface ImportSummary {
   failed: string[];
   playlists: number;
   missingEntries: number;
+  // Songs whose likes, plays and edits came back from a backup.
+  restored: number;
   outOfSpace: boolean;
   addedIds: string[];
 }
@@ -26,13 +29,10 @@ export function emptySummary(): ImportSummary {
     failed: [],
     playlists: 0,
     missingEntries: 0,
+    restored: 0,
     outOfSpace: false,
     addedIds: [],
   };
-}
-
-function trackPath(t: Track): string {
-  return t.source.kind === "linked" ? t.source.path : (t.path ?? t.fileName);
 }
 
 export interface Progress {
@@ -151,7 +151,7 @@ export interface ImportItem {
 // One file at a time keeps memory flat: each file is read, written and released before the next.
 export async function importItems(
   items: ImportItem[],
-  playlistFiles: File[],
+  extras: ExtraFile[],
   onProgress: (p: Progress) => void,
   signal?: AbortSignal,
 ): Promise<ImportSummary> {
@@ -186,18 +186,51 @@ export async function importItems(
     }
   }
   onProgress({ done, total: items.length, current: "" });
-  await importPlaylists(playlistFiles, summary);
+  await importExtras(extras, summary);
   return summary;
 }
 
-export async function importPlaylists(files: File[], summary: ImportSummary): Promise<void> {
+export const isExtraFile = (file: { name: string }) => isPlaylistFile(file) || isBackupFile(file.name);
+
+// Playlists and backups that came with the songs, with their path in the pick.
+export interface ExtraFile {
+  file: File;
+  path: string;
+}
+
+const folderOf = (path: string) => path.split("/").slice(0, -1).join("/");
+
+// A TuneNook backup carries its playlists itself, so the .m3u8 copies in its own Playlists folder are skipped.
+// Other playlists in the pick are added as usual.
+export async function importExtras(files: ExtraFile[], summary: ImportSummary): Promise<void> {
+  let latest: { backup: Backup; folder: string } | null = null;
+  for (const { file, path } of files.filter((f) => isBackupFile(f.file.name))) {
+    const backup = parseBackup(await file.text());
+    if (backup && (!latest || backup.exportedAt > latest.backup.exportedAt)) latest = { backup, folder: folderOf(path) };
+  }
+  if (latest) {
+    const result = await restoreBackup(latest.backup, new Set(summary.addedIds));
+    summary.restored += result.restored;
+    summary.playlists += result.playlists;
+    summary.missingEntries += result.missing;
+  }
+  const copies = latest ? [latest.folder, "Playlists"].filter(Boolean).join("/") : null;
+  await importPlaylists(
+    files.filter((f) => isPlaylistFile(f.file) && folderOf(f.path) !== copies).map((f) => f.file),
+    summary,
+  );
+}
+
+async function importPlaylists(files: File[], summary: ImportSummary): Promise<void> {
   const fresh = new Set(summary.addedIds);
   const candidates = getTracks().map((t) => ({ id: t.id, path: trackPath(t), fresh: fresh.has(t.id) }));
   for (const file of files) {
     const { ids, missing } = matchEntries(m3uEntries(await file.text()), candidates);
     summary.missingEntries += missing;
-    if (ids.length === 0) continue;
-    if (await createPlaylist(playlistName(file.name), ids)) summary.playlists++;
+    const name = playlistName(file.name);
+    // Rescanning a linked folder reads its playlists again; one that's already here as it is isn't added twice.
+    if (ids.length === 0 || hasPlaylist(name, ids)) continue;
+    if (await createPlaylist(name, ids)) summary.playlists++;
   }
 }
 
@@ -209,5 +242,6 @@ export function bytesToImport(files: { name: string; size: number; type: string 
 
 export function importFiles(files: File[], onProgress: (p: Progress) => void, signal?: AbortSignal): Promise<ImportSummary> {
   const audio = files.filter(isAudioFile).map((file) => ({ file, source: { kind: "copied" } as const }));
-  return importItems(audio, files.filter(isPlaylistFile), onProgress, signal);
+  const extras = files.filter(isExtraFile).map((file) => ({ file, path: file.webkitRelativePath || file.name }));
+  return importItems(audio, extras, onProgress, signal);
 }

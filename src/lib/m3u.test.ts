@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { m3uEntries, matchEntries, playlistName } from "./m3u";
+import { m3uEntries, matchEntries, playlistName, toM3u } from "./m3u";
 
 describe("m3u", () => {
   it("reads paths, decodes them and skips comments", () => {
@@ -36,5 +36,18 @@ describe("m3u", () => {
 
   it("names the playlist after the file", () => {
     expect(playlistName("Road trip.m3u8")).toBe("Road trip");
+  });
+
+  it("exports paths that import back to the same songs, in order, with repeats", () => {
+    const candidates = [
+      { id: "a", path: "Music/Album A/01 Intro.mp3", fresh: false },
+      { id: "b", path: "Music/Album B/01 Intro.mp3", fresh: false },
+      { id: "c", path: "#1 hit 100%.flac", fresh: false },
+    ];
+    const byId = new Map(candidates.map((c) => [c.id, c]));
+    const order = ["b", "c", "a", "b"];
+    const text = toM3u(order.map((id) => ({ path: byId.get(id)!.path, title: "Song\nTwo", artist: "Artist", duration: null })));
+    expect(text.split("\n").filter((l) => l.startsWith("#EXTINF"))).toHaveLength(4);
+    expect(matchEntries(m3uEntries(text), candidates)).toEqual({ ids: order, missing: 0 });
   });
 });
