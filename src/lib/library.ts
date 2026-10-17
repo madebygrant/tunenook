@@ -8,6 +8,10 @@ import type { Album, Artist, LinkedFolder, Playlist, Track } from "./types";
 
 // The live set of tracks. The arrays and maps handed to React are snapshots of it, rebuilt on publish.
 const store = new Map<string, Track>();
+// Songs opened with the installed app and played without adding. Outside store, so no list shows them and no write
+// saves them; the id lookups the player and the queue use still find them.
+const session = new Map<string, { track: Track; file: Blob }>();
+const sessionArt = new Map<string, Blob>();
 const artUsers = new Map<string, number>();
 let tracks: Track[] = [];
 let byId = new Map<string, Track>();
@@ -47,7 +51,7 @@ function dropTrack(id: string): void {
 function publish(): void {
   if (dirty) {
     tracks = [...store.values()];
-    byId = new Map(store);
+    byId = withSession(new Map(store));
     albums = groupAlbums(tracks);
     artists = groupArtists(albums);
     artistKeys = new Set(artists.map((a) => a.key));
@@ -164,8 +168,29 @@ export function getTracks(): Track[] {
 }
 
 export function getTrack(id: string): Track | undefined {
-  return store.get(id);
+  return store.get(id) ?? session.get(id)?.track;
 }
+
+function withSession(map: Map<string, Track>): Map<string, Track> {
+  for (const [id, s] of session) map.set(id, s.track);
+  return map;
+}
+
+// art is the song's own cover, kept in memory for the session rather than saved. Only the id map changes, since no
+// list shows these songs.
+export function addSessionTracks(list: { track: Track; file: Blob; art?: Blob }[]): void {
+  for (const { track, file, art } of list) {
+    const artId = art ? `session:${track.id}` : track.artId;
+    if (art && artId) sessionArt.set(artId, art);
+    session.set(track.id, { track: { ...track, artId }, file });
+  }
+  byId = withSession(new Map(byId));
+  emit();
+}
+
+// Playlists are saved and session songs aren't, so a saved playlist would point at nothing next time.
+const savedOnly = (p: Playlist): Playlist =>
+  p.trackIds.some((id) => session.has(id)) ? { ...p, trackIds: p.trackIds.filter((id) => !session.has(id)) } : p;
 
 export function getPlaylists(): Playlist[] {
   return playlists;
@@ -489,7 +514,8 @@ export async function removeTracksSafely(ids: ReadonlySet<string>): Promise<void
 }
 
 // Memory first, so quick edits build on each other; a failed write puts the old copy back.
-export async function savePlaylist(playlist: Playlist): Promise<boolean> {
+export async function savePlaylist(next: Playlist): Promise<boolean> {
+  const playlist = savedOnly(next);
   const before = playlists.find((p) => p.id === playlist.id);
   playlists = before ? playlists.map((p) => (p.id === playlist.id ? playlist : p)) : [...playlists, playlist];
   emit();
@@ -547,15 +573,17 @@ export async function deleteFolder(id: string): Promise<void> {
 }
 
 export async function storedFile(id: string): Promise<Blob | undefined> {
-  return get<Blob>("files", id);
+  return session.get(id)?.file ?? get<Blob>("files", id);
 }
 
 const artUrls = new Map<string, Promise<string | null>>();
 
+const artBlob = async (artId: string) => sessionArt.get(artId) ?? get<Blob>("art", artId);
+
 export function artUrl(artId: string): Promise<string | null> {
   let url = artUrls.get(artId);
   if (!url) {
-    url = get<Blob>("art", artId).then((blob) => (blob ? URL.createObjectURL(blob) : null));
+    url = artBlob(artId).then((blob) => (blob ? URL.createObjectURL(blob) : null));
     artUrls.set(artId, url);
   }
   return url;
@@ -568,7 +596,7 @@ function forgetArt(artId: string): void {
 
 // The lock screen gets a data URL: iOS doesn't reliably load blob: URLs for Media Session artwork.
 export async function artDataUrl(artId: string): Promise<string | null> {
-  const blob = await get<Blob>("art", artId);
+  const blob = await artBlob(artId);
   if (!blob) return null;
   return new Promise((resolve) => {
     const reader = new FileReader();

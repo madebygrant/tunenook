@@ -11,12 +11,14 @@ import './styles/app.css'
 import App from './App.tsx'
 import { startContentBackfill } from './lib/contentBackfill'
 import { checkAllAccess } from './lib/folders'
+import { listenForLaunch } from './lib/launch'
 import { loadLibrary } from './lib/library'
 import { initPlayer, restoreQueue } from './lib/player'
 import { listenForInstall, registerServiceWorker } from './lib/pwa'
 import { ensurePersistence } from './lib/storage'
 
 registerServiceWorker()
+listenForLaunch()
 listenForInstall(() => void ensurePersistence())
 void ensurePersistence()
 initPlayer()

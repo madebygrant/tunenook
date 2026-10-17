@@ -1,7 +1,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import { plural } from "../lib/format";
 import { canLinkFolders, copyIntoLibrary, NeedsAccessError, requestAccess } from "../lib/folders";
-import { addToPlaylist, artistPageFor, createPlaylist, toggleLike, getPlaylists, removeTracksSafely, savePlaylist, usePlaylists } from "../lib/library";
+import { addToPlaylist, artistPageFor, hasAlbum, createPlaylist, toggleLike, getPlaylists, removeTracksSafely, savePlaylist, usePlaylists } from "../lib/library";
 import { addToQueue, playNext, removeFromQueue } from "../lib/player";
 import { movePlaylistRow, visiblePositions } from "../lib/playlistMoves";
 import { missingFrom, withoutIndexes } from "../lib/playlists";
@@ -68,18 +68,19 @@ export function SongMenu({ target, onClose, onNavigate, onEdited, onToast }: Pro
   const items: MenuItem[] = [
     { label: "Play next", run: () => run(() => playNext([track.id]), `${track.title} plays next.`) },
     { label: "Add to queue", run: () => run(() => addToQueue([track.id]), `Added ${track.title} to the queue.`) },
-    { label: "Add to playlist…", run: () => setStep("pick") },
-    {
-      label: track.likedAt === undefined ? "Like" : "Unlike",
-      run: () => run(() => void toggleLike(track.id)),
-    },
-    { label: "Edit details…", run: () => setStep("edit") },
   ];
-  if (track.album) {
-    items.push({
-      label: "Go to album",
-      run: () => run(() => onNavigate({ kind: "album", key: albumKey(track.albumArtist || track.artist, track.album) })),
-    });
+  // A song played without adding isn't saved, so playlists, likes and edits would point at nothing next time.
+  if (track.source.kind !== "session") {
+    items.push(
+      { label: "Add to playlist…", run: () => setStep("pick") },
+      { label: track.likedAt === undefined ? "Like" : "Unlike", run: () => run(() => void toggleLike(track.id)) },
+      { label: "Edit details…", run: () => setStep("edit") },
+    );
+  }
+  // A song played without adding may be from an album that isn't in the library.
+  const album = track.album ? albumKey(track.albumArtist || track.artist, track.album) : null;
+  if (album && hasAlbum(album)) {
+    items.push({ label: "Go to album", run: () => run(() => onNavigate({ kind: "album", key: album })) });
   }
   const artist = artistPageFor(track);
   if (artist) items.push({ label: "Go to artist", run: () => run(() => onNavigate({ kind: "artist", key: artist })) });

@@ -40,6 +40,10 @@ export function dismissJob(): void {
   if (!job?.running) set(null);
 }
 
+export function getJob(): Job | null {
+  return job;
+}
+
 export function useJob(): Job | null {
   return useSyncExternalStore(subscribe, () => job);
 }

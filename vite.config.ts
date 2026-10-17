@@ -24,6 +24,25 @@ export default defineConfig({
           { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' },
           { src: 'maskable-icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
+        // "Open with TuneNook" for audio files on desktop Chromium, once installed. Playlists are left out: they
+        // only mean something next to their songs.
+        file_handlers: [
+          {
+            action: '/',
+            accept: {
+              'audio/mpeg': ['.mp3'],
+              'audio/mp4': ['.m4a', '.m4b'],
+              'audio/aac': ['.aac'],
+              'audio/flac': ['.flac'],
+              'audio/wav': ['.wav'],
+              'audio/aiff': ['.aif', '.aiff'],
+              'audio/ogg': ['.ogg', '.oga'],
+              'audio/opus': ['.opus'],
+            },
+          },
+        ],
+        // Files opened while TuneNook is already open go to that window instead of a new one.
+        launch_handler: { client_mode: 'focus-existing' },
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,woff2}'],

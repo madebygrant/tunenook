@@ -47,7 +47,7 @@ Risk: the backfill reads every stored file once. Run it in small batches, pause 
 
 Exit criterion: standard check passes. Rename a song's file, import it again, and the summary counts it as a duplicate.
 
-## Wave 4: file handlers
+## Wave 4: file handlers [done 2026-10-17]
 
 Goal: open audio files with TuneNook from the desktop.
 

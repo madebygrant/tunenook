@@ -4,6 +4,7 @@ import { AddMusic } from "./components/AddMusic";
 import { AlbumPage, Albums } from "./components/Albums";
 import { ArtistPage, Artists } from "./components/Artists";
 import { BrandMark, MenuIcon, RefreshIcon, UndoIcon } from "./components/icons";
+import { OpenedFiles } from "./components/OpenedFiles";
 import { Player } from "./components/Player";
 import { LikedPage, PlaylistPage, Playlists } from "./components/Playlists";
 import { Queue } from "./components/Queue";
@@ -328,6 +329,7 @@ export default function App() {
       </div>
       {menu && <SongMenu target={menu} onClose={() => setMenu(null)} onNavigate={navigate} onEdited={followEdit} onToast={showToast} />}
       {shortcutsOpen && <Shortcuts onClose={() => setShortcutsOpen(false)} />}
+      <OpenedFiles onAdding={() => navigate({ kind: "add" })} />
 
       {nowTrack && (
         <div className="player-dock" id="player">

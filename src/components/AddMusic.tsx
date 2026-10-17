@@ -17,6 +17,9 @@ import { InstallHint } from "./InstallHint";
 import { Confirm } from "./SongMenu";
 import { Button, Panel } from "./ui";
 
+// File handling only works in installed desktop Chromium, the same browsers that can link folders.
+const canOpenWith = canLinkFolders && "launchQueue" in window;
+
 const ACCEPT = "audio/*,.mp3,.m4a,.m4b,.aac,.flac,.wav,.aif,.aiff,.ogg,.oga,.opus,.m3u,.m3u8,.json";
 
 export function AddMusic() {
@@ -181,9 +184,18 @@ export function AddMusic() {
             {!storage.persisted && !standalone && ios && (
               <p className="muted">Add TuneNook to your Home Screen and iOS keeps its storage.</p>
             )}
-            {!storage.persisted && !standalone && !ios && canInstall && (
+            {(!storage.persisted || canOpenWith) && !standalone && !ios && canInstall && (
               <div className="storage-install">
-                <p className="muted">Install TuneNook and the browser keeps its storage.</p>
+                <p className="muted">
+                  Install TuneNook and{" "}
+                  {[
+                    !storage.persisted && "the browser keeps its storage",
+                    canOpenWith && "you can open audio files with it from Finder or File Explorer",
+                  ]
+                    .filter(Boolean)
+                    .join(", and ")}
+                  .
+                </p>
                 <Button variant="secondary" small onClick={() => void promptInstall()}>
                   Install
                 </Button>

@@ -1,7 +1,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { requestAccess } from "../lib/folders";
 import { formatClock } from "../lib/format";
-import { artistPageFor, toggleLike, useTrackMap } from "../lib/library";
+import { artistPageFor, hasAlbum, toggleLike, useTrackMap } from "../lib/library";
 import {
   cycleRepeat,
   getNowPlaying,
@@ -118,9 +118,11 @@ export function Player({ onNavigate }: { onNavigate: (view: View) => void }) {
 
   const repeatLabel = queue.repeat === "off" ? "Repeat off" : queue.repeat === "all" ? "Repeat all" : "Repeat one";
   const liked = track.likedAt !== undefined;
+  // A song played without adding isn't saved, so there's nothing to keep a like on.
+  const canLike = track.source.kind !== "session";
   const modes = (withLike: boolean) => (
     <div className="modes">
-      {withLike && (
+      {withLike && canLike && (
         <button className="mode-btn" aria-pressed={liked} aria-label="Like" title={`${liked ? "Liked" : "Like"} (L)`} onClick={likeCurrent}>
           <HeartIcon filled={liked} />
         </button>
@@ -187,7 +189,9 @@ export function Player({ onNavigate }: { onNavigate: (view: View) => void }) {
       </div>
     );
 
-  const albumView: View | null = track.album ? { kind: "album", key: albumKey(track.albumArtist || track.artist, track.album) } : null;
+  const albumKeyOf = track.album ? albumKey(track.albumArtist || track.artist, track.album) : null;
+  // A song played without adding may be from an album that isn't in the library.
+  const albumView: View | null = albumKeyOf && hasAlbum(albumKeyOf) ? { kind: "album", key: albumKeyOf } : null;
   const artistKey = artistPageFor(track);
   const artistView: View | null = artistKey ? { kind: "artist", key: artistKey } : null;
   const go = (view: View) => {

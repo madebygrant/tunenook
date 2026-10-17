@@ -1,4 +1,5 @@
-export type TrackSource = { kind: "copied" } | { kind: "linked"; folderId: string; path: string };
+// session: opened with the installed app and played without adding; held in memory until the app closes.
+export type TrackSource = { kind: "copied" } | { kind: "linked"; folderId: string; path: string } | { kind: "session" };
 
 export interface Track {
   id: string;

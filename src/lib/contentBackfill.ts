@@ -25,7 +25,7 @@ function idle(): Promise<void> {
 const shouldPause = () => isIOS() && getNowPlaying().playing;
 
 // Linked songs only while their folder is already allowed: reading them otherwise fails, and asking would prompt.
-const readable = (t: Track) => !t.contentKey && (t.source.kind === "copied" || isGranted(t.source.folderId));
+const readable = (t: Track) => !t.contentKey && (t.source.kind === "copied" || (t.source.kind === "linked" && isGranted(t.source.folderId)));
 
 async function run(): Promise<void> {
   const pending = getTracks().filter(readable);

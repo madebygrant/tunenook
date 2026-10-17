@@ -222,3 +222,29 @@ describe("setAlbumArt", () => {
     expect(await db.get("art", a!)).toBeDefined();
   });
 });
+
+describe("session tracks", () => {
+  it("can be found and played but never show in the lists or get saved", async () => {
+    const { library, db } = await load();
+    const file = new Blob(["opened"]);
+    library.addSessionTracks([{ track: makeTrack("s", { source: { kind: "session" } }), file }]);
+    expect(library.getTrack("s")?.title).toBe("Song s");
+    expect(await library.storedFile("s")).toBe(file);
+    expect(library.getTracks()).toEqual([]);
+    expect(library.groupAlbums(library.getTracks())).toEqual([]);
+    await library.toggleLike("s");
+    await library.recordPlay("s");
+    expect(await db.get("tracks", "s")).toBeUndefined();
+    expect(library.getTrack("s")?.likedAt).toBeUndefined();
+  });
+
+  it("are left out of saved playlists", async () => {
+    const { library } = await load();
+    await library.addTrack({ track: makeTrack("a") });
+    library.addSessionTracks([{ track: makeTrack("s", { source: { kind: "session" } }), file: new Blob(["opened"]) }]);
+    const created = await library.createPlaylist("Queue", ["s", "a", "s"]);
+    expect(library.getPlaylists()[0].trackIds).toEqual(["a"]);
+    await library.addToPlaylist(created!.id, ["s"]);
+    expect(library.getPlaylists()[0].trackIds).toEqual(["a"]);
+  });
+});
