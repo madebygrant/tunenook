@@ -15,14 +15,17 @@ import { CollectionMenu, MenuSheet } from "./SongMenu";
 import { SongList } from "./SongList";
 import { Button, CoverArt } from "./ui";
 
+const MIN_ALBUM_TRACKS = 3;
+
 export function Albums({ onOpen, onAdd }: { onOpen: (key: string) => void; onAdd: () => void }) {
   const albums = useAlbums();
+  const visible = useMemo(() => albums.filter((a) => a.tracks.length > MIN_ALBUM_TRACKS), [albums]);
   const [query, setQuery] = useState("");
   const search = useDeferredValue(query);
   const shown = useMemo(() => {
     const words = searchWords(search);
-    return words.length === 0 ? albums : albums.filter((a) => a.tracks.some((t) => matchesSearch(t, words)));
-  }, [albums, search]);
+    return words.length === 0 ? visible : visible.filter((a) => a.tracks.some((t) => matchesSearch(t, words)));
+  }, [visible, search]);
 
   return (
     <section aria-labelledby="albums-title">
@@ -30,7 +33,7 @@ export function Albums({ onOpen, onAdd }: { onOpen: (key: string) => void; onAdd
         <h1 id="albums-title" className="display-lg" tabIndex={-1}>
           Albums
         </h1>
-        {albums.length > 0 && <span className="count">{plural(albums.length, "album")}</span>}
+        {visible.length > 0 && <span className="count">{plural(visible.length, "album")}</span>}
       </div>
       {albums.length === 0 ? (
         <div className="empty">
@@ -40,16 +43,22 @@ export function Albums({ onOpen, onAdd }: { onOpen: (key: string) => void; onAdd
             <Button onClick={onAdd}>Add music</Button>
           </div>
         </div>
+      ) : visible.length === 0 ? (
+        <p className="list-empty muted">No albums with more than {MIN_ALBUM_TRACKS} songs yet.</p>
       ) : (
         <>
           <div className="list-tools">
             <SearchField label="Search albums and artists" value={query} onChange={setQuery} />
           </div>
-          <ul className="xh-shows tiles">
-            {shown.map((a) => (
-              <AlbumTile key={a.key} album={a} note={a.year ? `${a.artist} · ${a.year}` : a.artist} onOpen={onOpen} />
-            ))}
-          </ul>
+          {shown.length === 0 ? (
+            <p className="list-empty muted">No albums match “{search}”.</p>
+          ) : (
+            <ul className="xh-shows tiles">
+              {shown.map((a) => (
+                <AlbumTile key={a.key} album={a} note={a.year ? `${a.artist} · ${a.year}` : a.artist} onOpen={onOpen} />
+              ))}
+            </ul>
+          )}
         </>
       )}
     </section>
