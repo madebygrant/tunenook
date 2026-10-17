@@ -2075,3 +2075,10 @@ b.mono {
   font-size: 14px;
   color: var(--text-muted);
 }
+.song-gap {
+  list-style: none;
+}
+/* Off-screen rows are already unmounted, and skipped rows would report the placeholder height when measured. */
+.songs.is-windowed .song {
+  content-visibility: visible;
+}

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 import { compareText, plural } from "../lib/format";
 import { useTracks } from "../lib/library";
 import { playTracks } from "../lib/player";
@@ -65,12 +65,14 @@ export function Songs({
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>(loadSort);
   const [stats, setStats] = useState(() => playStats(tracks));
-  const words = searchWords(query);
-  const wordsKey = words.join(" ");
-  const shown = useMemo(
-    () => tracks.filter((t) => matchesSearch(t, searchWords(wordsKey))).sort(compare(sort, stats)),
-    [tracks, wordsKey, sort, stats],
-  );
+  // Deferred, so typing stays quick while a large library filters behind it.
+  const search = useDeferredValue(query);
+  // Sorted apart from the search, so a keystroke only filters; filtering keeps the order.
+  const sorted = useMemo(() => [...tracks].sort(compare(sort, stats)), [tracks, sort, stats]);
+  const shown = useMemo(() => {
+    const words = searchWords(search);
+    return words.length === 0 ? sorted : sorted.filter((t) => matchesSearch(t, words));
+  }, [sorted, search]);
   const { currentIndex, playing, onPlay } = useListPlayback(shown);
   const ids = shown.map((t) => t.id);
   const selection = useSelection(shown);
@@ -123,7 +125,7 @@ export function Songs({
             </div>
           </div>
           {shown.length === 0 ? (
-            <p className="list-empty muted">No songs match “{query}”.</p>
+            <p className="list-empty muted">No songs match “{search}”.</p>
           ) : (
             <SongList
               label="Songs"

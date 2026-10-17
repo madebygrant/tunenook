@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 import { formatTotal, plural } from "../lib/format";
 import { downscale } from "../lib/importer";
 import { setAlbumArt, totalSeconds, useAlbums } from "../lib/library";
@@ -17,8 +17,11 @@ import { Button, CoverArt } from "./ui";
 export function Albums({ onOpen, onAdd }: { onOpen: (key: string) => void; onAdd: () => void }) {
   const albums = useAlbums();
   const [query, setQuery] = useState("");
-  const words = searchWords(query);
-  const shown = albums.filter((a) => words.length === 0 || a.tracks.some((t) => matchesSearch(t, words)));
+  const search = useDeferredValue(query);
+  const shown = useMemo(() => {
+    const words = searchWords(search);
+    return words.length === 0 ? albums : albums.filter((a) => a.tracks.some((t) => matchesSearch(t, words)));
+  }, [albums, search]);
 
   return (
     <section aria-labelledby="albums-title">

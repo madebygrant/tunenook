@@ -4,7 +4,7 @@ Duplicate detection, export and backup, large libraries, file handlers and cover
 
 Every wave ends with the standard check: `pnpm test && pnpm lint && pnpm build` passes.
 
-## Wave 1: large libraries
+## Wave 1: large libraries [done 2026-10-17]
 
 Goal: ten thousand songs scroll smoothly on a phone.
 

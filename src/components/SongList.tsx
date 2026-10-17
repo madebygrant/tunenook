@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { formatClock } from "../lib/format";
+import { rowRuns, useRowWindow, WINDOW_FROM } from "../lib/rowWindow";
 import { useRowDrag } from "../lib/useRowDrag";
 import type { Track } from "../lib/types";
 import { CheckIcon, GripIcon, MoreIcon, PauseIcon, PlayIcon } from "./icons";
@@ -34,20 +35,46 @@ export function SongList({ tracks, currentIndex, playing, numbered, showAlbum = 
     if (isSelecting) cancel();
   }, [isSelecting, cancel]);
 
+  // Long lists only mount the rows near the screen. The focused and dragged rows stay mounted wherever they are,
+  // so focus isn't dropped and a drag isn't lost when they scroll away.
+  const windowed = tracks.length > WINDOW_FROM;
+  const range = useRowWindow(list, tracks.length, windowed);
+  // By song, so the row stays pinned when a move or a new song in the queue changes its position.
+  const [focusedKey, setFocusedKey] = useState<string | null>(null);
+  const focused = windowed && focusedKey !== null ? keys.indexOf(focusedKey) : -1;
+  const runs = windowed
+    ? rowRuns(tracks.length, { start: range.start, end: Math.min(range.end, tracks.length) }, [focused, drag?.from])
+    : [{ from: 0, to: tracks.length }];
+  const gapHeight = range.rowHeight || 64;
+
   function step(i: number, by: number) {
     const to = i + by;
     if (onReorder && to >= 0 && to < tracks.length) onReorder(i, to);
   }
 
   return (
-    <ul ref={list} className={`songs${selecting ? " is-selecting" : ""}${drag ? " is-dragging" : ""}`} aria-label={label}>
-      {tracks.map((t, i) => {
+    <ul
+      ref={list}
+      className={`songs${windowed ? " is-windowed" : ""}${selecting ? " is-selecting" : ""}${drag ? " is-dragging" : ""}`}
+      aria-label={label}
+      onFocus={(e) => {
+        if (!windowed) return;
+        const index = e.target.closest<HTMLElement>("[data-index]")?.dataset.index;
+        setFocusedKey(index === undefined ? null : (keys[Number(index)] ?? null));
+      }}
+      onBlur={(e) => {
+        if (windowed && !e.currentTarget.contains(e.relatedTarget)) setFocusedKey(null);
+      }}
+    >
+      {withGaps(runs, tracks.length, gapHeight, (i) => {
+        const t = tracks[i];
+        const position = windowed ? { "aria-posinset": i + 1, "aria-setsize": tracks.length, "data-index": i } : { "data-index": i };
         const current = i === currentIndex;
         const sub = showAlbum && t.album ? `${t.artist} · ${t.album}` : t.artist;
         if (selecting) {
           const selected = selecting.isSelected(i);
           return (
-            <li key={keys[i]} className={`song${selected ? " is-selected" : ""}`}>
+            <li key={keys[i]} className={`song${selected ? " is-selected" : ""}`} {...position}>
               <button
                 className="song-main"
                 aria-pressed={selected}
@@ -73,6 +100,7 @@ export function SongList({ tracks, currentIndex, playing, numbered, showAlbum = 
           <li
             key={keys[i]}
             className={`song${current ? " is-current" : ""}${dragged ? " is-dragged" : ""}`}
+            {...position}
             // The dragged row's offset is written by the drag itself, so React leaves its style alone.
             style={drag && !dragged ? ({ "--drag-y": `${shift * drag.height}px` } as CSSProperties) : undefined}
           >
@@ -120,4 +148,19 @@ export function SongList({ tracks, currentIndex, playing, numbered, showAlbum = 
       })}
     </ul>
   );
+}
+
+// Rows that aren't mounted are stood in for by empty items of the same height, so the scroll length stays right.
+function withGaps(runs: { from: number; to: number }[], count: number, rowHeight: number, row: (i: number) => ReactNode): ReactNode[] {
+  const out: ReactNode[] = [];
+  let next = 0;
+  const gap = (from: number, to: number) =>
+    to > from && out.push(<li key={`gap-${from}`} className="song-gap" aria-hidden="true" style={{ height: (to - from) * rowHeight }} />);
+  for (const run of runs) {
+    gap(next, run.from);
+    for (let i = run.from; i < run.to; i++) out.push(row(i));
+    next = run.to;
+  }
+  gap(next, count);
+  return out;
 }

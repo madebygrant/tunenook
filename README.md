@@ -21,7 +21,7 @@ pnpm test      # vitest
 pnpm lint      # oxlint
 pnpm build     # typecheck and build to dist/
 pnpm preview   # build and serve dist/ with the service worker
-pnpm deploy    # build and deploy to Cloudflare as static assets
+pnpm run deploy  # build and deploy to Cloudflare as static assets
 ```
 
-Deploying needs `wrangler login` once. `public/_headers` sets the CSP; it allows `blob:` and `data:` media and images, which playback and artwork need.
+Deploying needs `wrangler login` once. Use `pnpm run deploy`: plain `pnpm deploy` is a pnpm built-in and skips the script. `public/_headers` sets the CSP; it allows `blob:` and `data:` media and images, which playback and artwork need.

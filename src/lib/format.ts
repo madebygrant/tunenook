@@ -1,6 +1,9 @@
-// Ignores case and accents, and puts "Track 2" before "Track 10".
+// Ignores case and accents, and puts "Track 2" before "Track 10". One shared collator: localeCompare with
+// options builds a new one per call, which made sorting a large library take most of a second on a phone.
+const collator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
+
 export function compareText(a: string, b: string): number {
-  return a.localeCompare(b, undefined, { sensitivity: "base", numeric: true });
+  return collator.compare(a, b);
 }
 
 export function formatClock(totalSeconds: number): string {

@@ -33,7 +33,7 @@ export function useRowDrag(list: RefObject<HTMLElement | null>, keys: string[], 
 
   function start(e: ReactPointerEvent<HTMLElement>, from: number) {
     if (e.button !== 0 || !list.current) return;
-    const row = list.current.children[from] as HTMLElement | undefined;
+    const row = e.currentTarget.closest<HTMLElement>("li");
     const scroller = list.current.closest<HTMLElement>(".main");
     if (!row || !scroller) return;
     e.preventDefault();

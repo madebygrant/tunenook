@@ -16,9 +16,16 @@ export function useListPlayback(tracks: Track[]) {
   return { currentIndex: currentIndex >= 0 ? currentIndex : null, playing: now.playing, onPlay };
 }
 
+// Songs are replaced, never changed in place, so a song's text can be kept for the next keystroke.
+const searchText = new WeakMap<Track, string>();
+
 export function matchesSearch(t: Track, words: string[]): boolean {
   if (words.length === 0) return true;
-  const hay = `${t.title} ${t.artist} ${t.album} ${t.albumArtist}`.toLowerCase();
+  let hay = searchText.get(t);
+  if (hay === undefined) {
+    hay = `${t.title} ${t.artist} ${t.album} ${t.albumArtist}`.toLowerCase();
+    searchText.set(t, hay);
+  }
   return words.every((w) => hay.includes(w));
 }
 

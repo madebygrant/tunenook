@@ -19,8 +19,12 @@ registerServiceWorker()
 listenForInstall(() => void ensurePersistence())
 void ensurePersistence()
 initPlayer()
+const seeded = import.meta.env.DEV
+  ? import('./lib/devLibrary').then((m) => m.seedFromUrl()).catch((e: unknown) => console.error('Fake library failed', e))
+  : Promise.resolve()
 // The library loads before the first render so the app opens on the right page.
-void loadLibrary()
+void seeded
+  .then(loadLibrary)
   .then(() => Promise.all([restoreQueue(), checkAllAccess()]))
   .catch((e: unknown) => console.error('Library failed to load', e))
   .finally(() =>
