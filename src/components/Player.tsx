@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { requestAccess } from "../lib/folders";
 import { formatClock } from "../lib/format";
 import { artistPageFor, hasAlbum, toggleLike, useTrackMap } from "../lib/library";
@@ -12,6 +12,8 @@ import {
   seek,
   seekBy,
   SEEK_SECONDS,
+  setSleepTimer,
+  setVolume,
   toggle,
   toggleMute,
   toggleShuffle,
@@ -20,16 +22,22 @@ import {
   useNowPlaying,
   usePosition,
   useQueue,
+  useSleepTimer,
+  useVolume,
 } from "../lib/player";
+import { isIOS } from "../lib/standalone";
 import { isShortcut } from "../lib/keys";
 import { idAt } from "../lib/queue";
 import { albumKey } from "../lib/tags";
 import { Dialog } from "./Dialog";
-import { ChevronDownIcon, CloseIcon, HeartIcon, NextIcon, PauseIcon, PlayIcon, PrevIcon, RefreshIcon, RepeatIcon, RepeatOneIcon, ShuffleIcon } from "./icons";
+import { ChevronDownIcon, CloseIcon, HeartIcon, MoonIcon, MutedIcon, NextIcon, PauseIcon, PlayIcon, PrevIcon, RefreshIcon, RepeatIcon, RepeatOneIcon, ShuffleIcon, VolumeIcon } from "./icons";
 import type { View } from "./Sidebar";
 import { Button, CoverArt } from "./ui";
 
 const COLLAPSED_KEY = "tunenook.dockCollapsed";
+const SLEEP_MINUTES = [15, 30, 45, 60];
+// iOS makes audio.volume read-only; the hardware buttons are the only control.
+const canSetVolume = !isIOS();
 
 function loadCollapsed(): boolean {
   try {
@@ -42,6 +50,80 @@ function loadCollapsed(): boolean {
 function likeCurrent(): void {
   const id = getNowPlaying().id;
   if (id) void toggleLike(id);
+}
+
+// Whole seconds, so the snapshot only changes when the countdown would.
+const nowSeconds = () => Math.floor(Date.now() / 1000);
+
+function subscribeClock(onTick: () => void): () => void {
+  const timer = setInterval(onTick, 1000);
+  return () => clearInterval(timer);
+}
+
+function Countdown({ endsAt }: { endsAt: number }) {
+  const now = useSyncExternalStore(subscribeClock, nowSeconds);
+  return <>Stops in {formatClock(Math.max(0, Math.ceil(endsAt / 1000) - now))}</>;
+}
+
+function SleepTimerControl() {
+  const sleep = useSleepTimer();
+  const [open, setOpen] = useState(false);
+  const choose = (choice: number | "song" | null) => {
+    setSleepTimer(choice);
+    setOpen(false);
+  };
+
+  return (
+    <div className="sleep-timer">
+      <button className="sleep-btn" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <MoonIcon />
+        <span>{!sleep ? "Sleep timer" : sleep.kind === "song" ? "Stops after this song" : <Countdown endsAt={sleep.endsAt} />}</span>
+      </button>
+      {open && (
+        <div className="sleep-options" role="group" aria-label="Stop playing after">
+          {SLEEP_MINUTES.map((minutes) => (
+            <Button key={minutes} variant="secondary" small onClick={() => choose(minutes)}>
+              {minutes} min
+            </Button>
+          ))}
+          <Button variant="secondary" small aria-pressed={sleep?.kind === "song"} onClick={() => choose("song")}>
+            End of this song
+          </Button>
+          {sleep && (
+            <Button variant="ghost" small onClick={() => choose(null)}>
+              Turn off
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function VolumeControl({ muted }: { muted: boolean }) {
+  const volume = useVolume();
+  const shown = muted ? 0 : volume;
+  // A volume of 0 counts as muted, so the button and M bring the sound back either way.
+  const silent = shown === 0;
+  return (
+    <div className="volume">
+      <button className="mode-btn" aria-pressed={silent} aria-label="Mute" title={`${silent ? "Unmute" : "Mute"} (M)`} onClick={toggleMute}>
+        {silent ? <MutedIcon /> : <VolumeIcon />}
+      </button>
+      <input
+        className="seek"
+        type="range"
+        aria-label="Volume"
+        aria-valuetext={`${Math.round(shown * 100)}%`}
+        min={0}
+        max={1}
+        step={0.05}
+        value={shown}
+        style={{ "--pct": `${shown * 100}%` } as CSSProperties}
+        onChange={(e) => setVolume(Number(e.target.value))}
+      />
+    </div>
+  );
 }
 
 export function Player({ onNavigate }: { onNavigate: (view: View) => void }) {
@@ -216,6 +298,7 @@ export function Player({ onNavigate }: { onNavigate: (view: View) => void }) {
       {transport}
       {seekRow(true)}
       {modes(false)}
+      {canSetVolume && <VolumeControl muted={muted} />}
       <button className="dock-toggle" aria-expanded={!collapsed} aria-label={collapsed ? "Expand player" : "Collapse player"} onClick={toggleCollapsed}>
         <ChevronDownIcon />
       </button>
@@ -249,6 +332,7 @@ export function Player({ onNavigate }: { onNavigate: (view: View) => void }) {
             {transport}
             {modes(true)}
           </div>
+          <SleepTimerControl />
           <button
             className="up-next"
             onClick={() => {

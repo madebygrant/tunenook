@@ -59,7 +59,7 @@ Items:
 
 Exit criterion: standard check passes. In installed Chrome on macOS, "Open with TuneNook" on an mp3 plays it.
 
-## Wave 5: cover art lookup
+## Wave 5: cover art lookup [done 2026-10-17]
 
 Goal: fill in missing album art, only when the user asks.
 

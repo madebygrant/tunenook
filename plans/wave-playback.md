@@ -4,7 +4,7 @@ Sleep timer, volume, lyrics, audiobooks and gapless playback. Backlog: [ideas.md
 
 Every wave ends with the standard check: `pnpm test && pnpm lint && pnpm build` passes. Waves that touch the audio element also need the playback section of [iphone-pwa-check.md](iphone-pwa-check.md) run on a real iPhone before deploying.
 
-## Wave 1: sleep timer and volume
+## Wave 1: sleep timer and volume [done 2026-10-17]
 
 Goal: the two small controls people expect.
 

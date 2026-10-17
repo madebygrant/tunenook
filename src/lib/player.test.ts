@@ -113,4 +113,62 @@ describe("player", () => {
     player.toggleMute();
     expect(player.isMuted()).toBe(false);
   });
+
+  it("remembers the volume and unmutes when it's moved", async () => {
+    const { player, audio } = await setup(["a"]);
+    player.toggleMute();
+    player.setVolume(0.4);
+    expect(audio.volume).toBe(0.4);
+    expect(audio.muted).toBe(false);
+    window.dispatchEvent(new Event("pagehide"));
+    expect(localStorage.getItem("tunenook.volume")).toBe("0.4");
+  });
+
+  it("brings the sound back from a volume of 0 with mute", async () => {
+    const { player, audio } = await setup(["a"]);
+    player.setVolume(0.6);
+    player.setVolume(0);
+    player.toggleMute();
+    expect(audio.muted).toBe(false);
+    expect(audio.volume).toBe(0.6);
+  });
+});
+
+describe("sleep timer", () => {
+  it("stops at the end of the song playing then, even after a skip, with the next one ready", async () => {
+    const { player, audio, loaded } = await setup(["a", "b", "c"]);
+    player.playTracks(["a", "b", "c"], 0);
+    await loaded("a");
+    player.setSleepTimer("song");
+    player.next();
+    await loaded("b");
+    const plays = vi.mocked(audio.play).mock.calls.length;
+    audio.dispatchEvent(new Event("ended"));
+    await loaded("c");
+    expect(vi.mocked(audio.play).mock.calls.length).toBe(plays);
+    expect(player.getSleepTimer()).toBeNull();
+  });
+
+  it("fades over the last ten seconds, then pauses and restores the volume", async () => {
+    const { player, audio } = await setup(["a"]);
+    player.playTracks(["a"], 0);
+    // loaded() can pass on the silent unlock clip; playing is only set once the song itself plays.
+    await vi.waitFor(() => expect(player.getNowPlaying().playing).toBe(true));
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    try {
+      player.setVolume(0.8);
+      player.setSleepTimer(15);
+      vi.advanceTimersByTime(15 * 60_000 - 5000);
+      expect(audio.volume).toBeCloseTo(0.4);
+      expect(audio.pause).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(5000);
+      expect(audio.pause).toHaveBeenCalled();
+      expect(audio.volume).toBeLessThan(0.1);
+      expect(player.getSleepTimer()).toBeNull();
+      player.toggle();
+      expect(audio.volume).toBe(0.8);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

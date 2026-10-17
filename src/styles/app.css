@@ -2082,3 +2082,61 @@ b.mono {
 .songs.is-windowed .song {
   content-visibility: visible;
 }
+.switch-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.switch-row input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--lamp);
+}
+
+.xh-player .volume {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 1 140px;
+  min-width: 96px;
+}
+.sleep-timer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.sleep-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: color var(--slow) var(--ease);
+}
+.sleep-btn:hover {
+  color: var(--text);
+}
+.sleep-btn svg {
+  width: 18px;
+  height: 18px;
+}
+.sleep-options {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+@media (max-width: 760px) {
+  .xh-player .volume {
+    display: none;
+  }
+}

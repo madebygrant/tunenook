@@ -29,6 +29,11 @@ const RESTART_AFTER_SECONDS = 3;
 const MAX_SKIPS = 3;
 const SAVE_KEY = "tunenook.queue";
 const SAVE_INTERVAL_MS = 5000;
+const VOLUME_KEY = "tunenook.volume";
+const FADE_MS = 10_000;
+
+// "song" stops at the end of whatever song is playing then, so it follows a skip.
+export type SleepTimer = { kind: "at"; endsAt: number } | { kind: "song" };
 
 export type Failure = { kind: "error" } | { kind: "access"; folderId: string };
 
@@ -59,6 +64,27 @@ const urls = new Map<string, string>();
 const pending = new Map<string, Promise<string>>();
 const { emit, subscribe } = createListeners();
 let save: () => void = () => {};
+let sleep: SleepTimer | null = null;
+let sleepCheck: ReturnType<typeof setTimeout> | undefined;
+let volume = readVolume();
+// What unmuting returns to once the slider has been dragged to 0.
+let audible = volume || 1;
+// Below 1 only during a sleep timer's fade.
+let fade = 1;
+let saveVolume: () => void = () => {};
+
+function readVolume(): number {
+  try {
+    const saved = Number(localStorage.getItem(VOLUME_KEY) ?? "1");
+    return Number.isFinite(saved) ? Math.min(Math.max(saved, 0), 1) : 1;
+  } catch {
+    return 1;
+  }
+}
+
+function applyVolume(): void {
+  if (audio) audio.volume = volume * fade;
+}
 
 function setNow(patch: Partial<NowPlaying>): void {
   now = { ...now, ...patch };
@@ -222,15 +248,16 @@ function clearMetadata(): void {
   navigator.mediaSession.playbackState = "none";
 }
 
+// Playing it again from here is a new play.
+function rewindAndStop(): void {
+  audio?.pause();
+  listens.reset();
+  if (audio) audio.currentTime = 0;
+}
+
 function advance(auto: boolean): void {
   const at = nextAt(queue, auto);
-  if (at === null) {
-    // End of the queue: rewind and stop. Playing it again from there is a new play.
-    audio?.pause();
-    listens.reset();
-    if (audio) audio.currentTime = 0;
-    return;
-  }
+  if (at === null) return rewindAndStop();
   if (at === queue.at && audio) {
     // Repeat one plays the same load again, and each time round is a play.
     listens.reset();
@@ -244,7 +271,52 @@ function advance(auto: boolean): void {
 
 function onEnded(): void {
   skips = 0;
+  if (sleep?.kind === "song") {
+    setSleepTimer(null);
+    // The next song waits, paused, so the morning's Play doesn't repeat the one already heard.
+    const at = nextAt(queue, true);
+    if (at === null || at === queue.at) return rewindAndStop();
+    setQueue(jump(queue, at));
+    load(false);
+    return;
+  }
   advance(true);
+}
+
+function clearSleep(): void {
+  clearTimeout(sleepCheck);
+  sleepCheck = undefined;
+  sleep = null;
+  fade = 1;
+  emit();
+}
+
+// Runs on every timeupdate as well as on its own timeout: iOS throttles timers with the screen locked but keeps
+// sending timeupdate while audio plays. iOS ignores volume changes, so there it pauses without the fade.
+// The volume comes back on the next play, not here, so no buffered audio sounds at full level as it stops.
+function checkSleep(): void {
+  if (sleep?.kind !== "at") return;
+  const left = sleep.endsAt - Date.now();
+  if (left <= 0) {
+    clearSleep();
+    audio?.pause();
+    wantPlay = false;
+    // A next song still loading would otherwise start by itself once it's ready.
+    if (loadedId !== currentId(queue)) load(false);
+    return;
+  }
+  const nextFade = Math.min(1, left / FADE_MS);
+  if (nextFade !== fade) {
+    fade = nextFade;
+    applyVolume();
+  }
+  sleepCheck ??= setTimeout(
+    () => {
+      sleepCheck = undefined;
+      checkSleep();
+    },
+    left > FADE_MS ? left - FADE_MS : 250,
+  );
 }
 
 // Moves past a broken or missing file mid-queue, but gives up after a few so a bad batch doesn't spin.
@@ -267,6 +339,7 @@ export function initPlayer(): void {
   audio.setAttribute("playsinline", "");
   document.body.appendChild(audio);
   const a = audio;
+  applyVolume();
 
   a.addEventListener("loadedmetadata", () => {
     if (a.src === silentUrl) return;
@@ -286,6 +359,7 @@ export function initPlayer(): void {
   });
   a.addEventListener("timeupdate", () => {
     if (a.src === silentUrl) return;
+    checkSleep();
     if (countingId && listens.observe(a.currentTime, a.duration)) void recordPlay(countingId);
     const next = Math.floor(a.currentTime);
     if (next !== position) {
@@ -296,6 +370,7 @@ export function initPlayer(): void {
   });
   a.addEventListener("play", () => {
     if (a.src === silentUrl) return;
+    applyVolume();
     setNow({ playing: true, blocked: false });
     publishPlaybackState("playing");
     publishPosition(a);
@@ -324,6 +399,7 @@ export function initPlayer(): void {
     });
   }
 
+  saveVolume = throttledWriter(VOLUME_KEY, () => volume, SAVE_INTERVAL_MS);
   save = throttledWriter(SAVE_KEY, () => ({ queue, position: audio?.currentTime ?? position }), SAVE_INTERVAL_MS);
   onTracksRemoved(dropTracks);
 }
@@ -432,7 +508,30 @@ export function seekBy(seconds: number): void {
 }
 
 export function toggleMute(): void {
-  if (audio) audio.muted = !audio.muted;
+  if (!audio) return;
+  if (volume === 0 && !audio.muted) setVolume(audible);
+  else audio.muted = !audio.muted;
+}
+
+// Moving the slider unmutes, as a hardware volume control would.
+export function setVolume(level: number): void {
+  volume = Math.min(Math.max(level, 0), 1);
+  if (volume > 0) audible = volume;
+  applyVolume();
+  if (audio && volume > 0) audio.muted = false;
+  emit();
+  saveVolume();
+}
+
+// Minutes from now, "song" for the end of the playing song, or null to cancel.
+export function setSleepTimer(choice: number | "song" | null): void {
+  clearSleep();
+  if (choice !== null) {
+    sleep = choice === "song" ? { kind: "song" } : { kind: "at", endsAt: Date.now() + choice * 60_000 };
+    emit();
+  }
+  applyVolume();
+  checkSleep();
 }
 
 export function toggleShuffle(): void {
@@ -485,6 +584,18 @@ export function isMuted(): boolean {
 
 export function useMuted(): boolean {
   return useSyncExternalStore(subscribe, isMuted);
+}
+
+export function useVolume(): number {
+  return useSyncExternalStore(subscribe, () => volume);
+}
+
+export function getSleepTimer(): SleepTimer | null {
+  return sleep;
+}
+
+export function useSleepTimer(): SleepTimer | null {
+  return useSyncExternalStore(subscribe, () => sleep);
 }
 
 export function useDuration(): number {

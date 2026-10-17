@@ -1,5 +1,5 @@
 /*
-  Content-Security-Policy: default-src 'self'; img-src 'self' blob: data:; media-src 'self' blob: data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; img-src 'self' blob: data:; media-src 'self' blob: data:; connect-src 'self' https://musicbrainz.org https://coverartarchive.org https://archive.org https://*.archive.org; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
   Referrer-Policy: no-referrer
   X-Robots-Tag: noindex, nofollow, noarchive
   X-Content-Type-Options: nosniff

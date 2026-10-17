@@ -1,7 +1,8 @@
 import { useDeferredValue, useMemo, useState } from "react";
 import { formatTotal, plural } from "../lib/format";
+import { findAlbumArt, needsArt, useArtLookup, type LookupResult } from "../lib/artLookup";
 import { downscale } from "../lib/importer";
-import { setAlbumArt, totalSeconds, useAlbums } from "../lib/library";
+import { isUntaggedGroup, setAlbumArt, totalSeconds, useAlbums } from "../lib/library";
 import { playTracks } from "../lib/player";
 import { matchesSearch, searchWords, useListPlayback } from "../lib/useListPlayback";
 import { useSelection } from "../lib/useSelection";
@@ -90,6 +91,7 @@ export function AlbumPage({
   const { currentIndex, playing, onPlay } = useListPlayback(tracks);
   const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState(false);
+  const lookupOn = useArtLookup();
   const selection = useSelection(tracks);
   const ids = tracks.map((t) => t.id);
 
@@ -105,7 +107,21 @@ export function AlbumPage({
   }
 
   // Songs with no album are grouped here by artist, but each keeps its own cover and stays off any album.
-  const untagged = !album.tracks[0]?.album;
+  const untagged = isUntaggedGroup(album);
+
+  async function findArtwork(target: Album) {
+    onToast(`Looking up ${target.title} on MusicBrainz…`);
+    let result: LookupResult;
+    try {
+      result = await findAlbumArt(target);
+    } catch (e) {
+      return onToast(e instanceof Error ? e.message : "Couldn't look up the artwork.");
+    }
+    // A failed save has already been reported by the library.
+    if (result === "found") onToast(`Found artwork for ${target.title}.`);
+    else if (result === "none") onToast(`MusicBrainz has no artwork for ${target.title}.`);
+    else if (result === "has-art") onToast(`${target.title} got artwork while looking, so it was kept.`);
+  }
 
   async function setArtwork(file: File) {
     const blob = await downscale(file);
@@ -161,6 +177,18 @@ export function AlbumPage({
               run: () => setMenuOpen(false),
               pick: { accept: "image/*", onPick: (file) => void setArtwork(file) },
             },
+            ...(lookupOn && needsArt(album)
+              ? [
+                  {
+                    // Says where it goes, since it's the one action that sends anything off the device.
+                    label: "Find artwork on MusicBrainz",
+                    run: () => {
+                      setMenuOpen(false);
+                      void findArtwork(album);
+                    },
+                  },
+                ]
+              : []),
           ]}
           onClose={() => setMenuOpen(false)}
           onToast={onToast}

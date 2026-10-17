@@ -96,6 +96,16 @@ export function groupAlbums(list: Track[]): Album[] {
   return [...groups.values()].sort((a, b) => compareText(a.title, b.title) || compareText(a.artist, b.artist));
 }
 
+// The songs with no album tag, grouped by artist. They're never one album: each keeps its own cover and details.
+// An album's tracks are either all untagged or all tagged, since untagged songs have their own key.
+export function isUntaggedGroup(album: Album): boolean {
+  return !album.tracks[0]?.album;
+}
+
+export function getAlbums(): Album[] {
+  return dirty ? groupAlbums(getTracks()) : albums;
+}
+
 export function artistKey(name: string): string {
   return name.toLowerCase();
 }
@@ -120,8 +130,7 @@ export function groupArtists(albums: Album[]): Artist[] {
   };
   for (const album of albums) {
     const owner = artistFor(album.artist);
-    // An album's tracks are either all untagged or all tagged, since untagged songs have their own key.
-    const untagged = !album.tracks[0]?.album;
+    const untagged = isUntaggedGroup(album);
     if (untagged) owner.songs.push(...album.tracks);
     else owner.albums.push(album);
     for (const t of album.tracks) {
@@ -429,11 +438,21 @@ export function editTracks(edits: ReadonlyMap<string, TagEdit>): Promise<boolean
 }
 
 // A fresh id per image, so covers already on screen under the old id needn't be reloaded in place.
-export function setAlbumArt(key: string, blob: Blob): Promise<boolean> {
-  return queueTrackWrite(async () => {
+export async function setAlbumArt(key: string, blob: Blob): Promise<boolean> {
+  const ids = [...store.values()].filter((t) => trackAlbumKey(t) === key).map((t) => t.id);
+  return (await setTracksArt(ids, blob)) === "saved";
+}
+
+export type ArtResult = "saved" | "has-art" | "gone" | "failed";
+
+// By song id, so an album renamed meanwhile still gets it. ifMissing is for art found online: if any of the songs
+// got a cover while the lookup ran, set by hand or imported, that one stays.
+export function setTracksArt(ids: string[], blob: Blob, { ifMissing = false } = {}): Promise<ArtResult> {
+  return queueTrackWrite(async (): Promise<ArtResult> => {
     const artId = newArtId();
-    const songs = [...store.values()].filter((t) => trackAlbumKey(t) === key);
-    if (songs.length === 0) return false;
+    const songs = ids.flatMap((id) => store.get(id) ?? []);
+    if (songs.length === 0) return "gone";
+    if (ifMissing && songs.some((t) => t.artId)) return "has-art";
     const unusedArt = freeArt(songs.map((t) => [t.artId, artId]));
     try {
       await write([
@@ -443,7 +462,7 @@ export function setAlbumArt(key: string, blob: Blob): Promise<boolean> {
       ]);
     } catch (e) {
       reportError("Couldn't save the artwork. Nothing was changed.", e);
-      return false;
+      return "failed";
     }
     unusedArt.forEach(forgetArt);
     for (const t of songs) {
@@ -451,7 +470,7 @@ export function setAlbumArt(key: string, blob: Blob): Promise<boolean> {
       if (latest) putTrack({ ...latest, artId });
     }
     publish();
-    return true;
+    return "saved";
   });
 }
 

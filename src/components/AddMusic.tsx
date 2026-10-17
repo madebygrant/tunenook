@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { canLinkFolders, copyIntoLibrary, NeedsAccessError, NotEnoughSpaceError, requestAccess, scanFolder, unlinkFolder, useGranted, linkFolder } from "../lib/folders";
+import { albumsToLookUp, findMissingArt, needsArt, setArtLookup, useArtLookup } from "../lib/artLookup";
 import { backupToFolder, backupZip } from "../lib/backup";
 import { download } from "../lib/download";
 import { formatBytes, plural } from "../lib/format";
 import { bytesToImport, importFiles } from "../lib/importer";
 import { cancelJob, dismissJob, runJob, useJob } from "../lib/job";
-import { getTracks, useFolders, useTracks } from "../lib/library";
+import { getTracks, useAlbums, useFolders, useTracks } from "../lib/library";
 import { promptInstall, useCanInstall } from "../lib/pwa";
 import { isIOS, useStandalone } from "../lib/standalone";
 import { ensurePersistence, freeBytes, useStorage } from "../lib/storage";
@@ -134,6 +135,7 @@ export function AddMusic() {
             </Button>
           </Panel>
         )}
+        {tracks.length > 0 && <ArtLookupPanel busy={job?.running ?? false} />}
         {tracks.length > 0 && (
           <Panel>
             <h2 className="h3">Back up</h2>
@@ -358,5 +360,45 @@ function FolderRow({ folder, busy }: { folder: LinkedFolder; busy: boolean }) {
         </Dialog>
       )}
     </div>
+  );
+}
+
+// The only feature that reaches another server, so it says exactly what is sent and does nothing until asked.
+function ArtLookupPanel({ busy }: { busy: boolean }) {
+  const on = useArtLookup();
+  const albums = useAlbums();
+  const missing = albums.filter(needsArt).length;
+  // Re-read after each job, since a run records the albums it found nothing for.
+  const toLookUp = busy ? 0 : albumsToLookUp(albums).length;
+  return (
+    <Panel>
+      <h2 className="h3">Online artwork</h2>
+      <p className="muted">
+        TuneNook keeps everything on this device. With this on, you can ask it to find covers for albums that have none: it
+        sends each album's title and artist to MusicBrainz and downloads the cover from the Cover Art Archive. Nothing is
+        looked up until you ask.
+      </p>
+      <label className="switch-row">
+        <input type="checkbox" role="switch" checked={on} onChange={(e) => setArtLookup(e.target.checked)} />
+        Look up missing artwork online
+      </label>
+      {on && (
+        <div className="dialog-actions">
+          <Button
+            variant="secondary"
+            disabled={busy || toLookUp === 0}
+            onClick={() => void runJob("Finding artwork", (onProgress, signal) => findMissingArt(onProgress, signal))}
+          >
+            {missing === 0 ? "Every album has artwork" : toLookUp ? `Find artwork for ${plural(toLookUp, "album")}` : "Nothing new to look up"}
+          </Button>
+        </div>
+      )}
+      {on && missing > toLookUp && !busy && (
+        <p className="xh-help">
+          {plural(missing - toLookUp, "album")} had no match on MusicBrainz in the last 30 days, so {missing - toLookUp === 1 ? "it's" : "they're"}{" "}
+          skipped. Each album page can still look one up.
+        </p>
+      )}
+    </Panel>
   );
 }

@@ -203,3 +203,21 @@ export const UndoIcon = (props: SVGProps<SVGSVGElement>) => (
     <path d="M3 6h6.5a3.5 3.5 0 0 1 0 7H6M5.5 3L3 6l2.5 3" />
   </svg>
 );
+
+export const MoonIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" {...base} {...props}>
+    <path d="M19 15.5A8 8 0 0 1 8.5 5a8 8 0 1 0 10.5 10.5z" />
+  </svg>
+);
+
+export const VolumeIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" {...base} {...props}>
+    <path d="M4 9h4l5-4v14l-5-4H4zM16.5 9a4 4 0 0 1 0 6M19 6.5a7.5 7.5 0 0 1 0 11" />
+  </svg>
+);
+
+export const MutedIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" {...base} {...props}>
+    <path d="M4 9h4l5-4v14l-5-4H4zM16 9.5l5 5M21 9.5l-5 5" />
+  </svg>
+);
