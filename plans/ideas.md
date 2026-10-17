@@ -31,7 +31,7 @@ Suggested order across plans: Navigation, then Library waves 1 and 2, then the r
 - **Volume.** A volume slider and mute on desktop. iOS ignores `audio.volume`, so hide it there.
 - **Lyrics.** `music-metadata` exposes embedded lyrics. Store them at import and show them in the expanded player.
 - **Audiobooks.** `.m4b` is accepted but has no speed control, no per-book resume and no chapters. Either support them properly or stop accepting `.m4b`.
-- **Gapless playback.** One audio element swapping `src` leaves a gap between tracks. Live albums and mixes need a second element preloaded and swapped on end.
+- **Gapless playback.** One audio element swapping `src` leaves a gap between tracks. Live albums and mixes need the next song decoded and scheduled with Web Audio, since swapping two elements only shortens the gap.
 
 ## Data and platform
 

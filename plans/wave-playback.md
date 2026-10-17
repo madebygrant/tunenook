@@ -49,16 +49,36 @@ Risk: changes what lock-screen Previous and Next do for these tracks. Check that
 
 Exit criterion: standard check passes. Play an `.m4b`, stop halfway through a chapter, play an album, then return to the book. It resumes where it stopped.
 
-## Wave 4: gapless playback [skipped 2026-10-17]
+## Wave 4: gapless groundwork [skipped 2026-10-17]
 
-Goal: no silence between tracks on albums mastered without gaps.
+Goal: prove Web Audio playback works on iPhone, and split the player so a second engine can sit beside the current one. No change people can hear yet.
+
+Why not two audio elements: switching elements on `timeupdate` lands within about 250 ms of the end, which swaps the gap for a shorter gap or an overlap. MP3 and AAC files also carry encoder padding that an element can't trim. Joining songs exactly needs Web Audio, scheduling the next decoded song with `AudioBufferSourceNode.start(when)` at the sample where the current one ends.
 
 Items:
 
-1. In `src/lib/player.ts`, keep a second audio element loaded with the next song. A few hundred milliseconds before the current one ends, start the next and swap which element is active.
-2. The prefetch already keeps the next song's object URL ready, so reuse it. Repeat one, shuffle changes and queue edits must reload the standby element.
-3. Move all event listeners, the Media Session handlers and the silent-unlock trick to work with whichever element is active.
+1. Spike on a real iPhone, in a dev-only page. Route an `AudioContext` into a `MediaStreamAudioDestinationNode` and play that stream through the existing `<audio>` element (`srcObject`), so the OS still sees one media element. Check that it keeps playing with the screen locked and the silent switch on, that the lock screen shows Media Session metadata and its controls work, and that `AudioContext.resume()` inside a tap replaces the silent-WAV unlock. Measure memory with two decoded songs held at once.
+2. If the spike fails on iOS, stop here and record what failed in this file. Gapless then ships on desktop only, or not at all.
+3. In `src/lib/player.ts`, put the element code behind an `Engine` interface: load, play, pause, seek, position, duration, and ended, error and tick callbacks. Move today's code into `ElementEngine` with no change in behaviour. Things that hang off `timeupdate` today (listen counting, the sleep timer check, the position save, `publishPosition`) take the engine's tick instead.
 
-Risk: high. This is the core of playback, and iOS may refuse to start the standby element while locked, or may count it as a second media session. Keep a single-element fallback behind a setting, and run the whole iPhone check before shipping.
+Risk: the refactor touches every playback path. The existing player tests must pass unchanged, and the playback section of the iPhone check must pass before deploying.
 
-Exit criterion: standard check passes. A gapless album plays across track changes without an audible gap on desktop Chrome, and the iPhone check passes with the screen locked.
+Exit criterion: standard check passes. The spike's results are written into this file. Playback, the lock screen and the sleep timer behave as before on desktop Chrome and on iPhone.
+
+## Wave 5: gapless playback [skipped 2026-10-17]
+
+Goal: albums mastered without gaps play with no gap or click between tracks.
+
+Needs wave 4, with the spike passed on iOS or a decision to ship on desktop only.
+
+Items:
+
+1. Add a `BufferEngine`. Decode with `decodeAudioData` from the blobs `prepare()` already loads, and decode the next song while the current one plays. Schedule the next song at the current one's exact end, and keep the position from `context.currentTime`. Hold only the current and next buffers. Ticks come from a timer reading `context.currentTime`, since `requestAnimationFrame` stops with the screen locked.
+2. Use `BufferEngine` only for a join that needs it: the next song in the queue is the following track on the same album (by disc and track number), and both songs are under a length cap set from the spike's memory figures. Decoded stereo at 44.1 kHz takes about 21 MB a minute. Everything else stays on `ElementEngine`, and engines switch only at song boundaries.
+3. Encoder padding. Check in Chrome and Safari whether `decodeAudioData` already trims the MP3 LAME delay and padding and the AAC `iTunSMPB` or edit-list padding. Where it doesn't, read the values at import and offset the start and end. Test with files whose padding is known.
+4. Repeat one, shuffle changes, queue edits and a seek near the end must cancel the scheduled next source and schedule again.
+5. Add a "Gapless playback" setting, on by default, that falls back to `ElementEngine` everywhere.
+
+Risk: high. This is the core of playback. A scheduling mistake plays two songs at once or skips one, and iOS may stop Web Audio in the background in ways the spike missed. Run the whole iPhone check with the screen locked before shipping.
+
+Exit criterion: standard check passes. A test pair made from one sine wave split into two WAV files joins without a click on desktop Chrome and Safari, and so does an LAME-encoded MP3 pair. An ordinary album and a shuffled queue play as before. The iPhone check passes with the screen locked.
