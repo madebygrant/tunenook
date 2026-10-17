@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { startContentBackfill } from "./contentBackfill";
 import { importItems, isExtraFile, type ImportSummary, type Progress } from "./importer";
 import { deleteFolder, getFolders, getTracks, patchTrack, removeTracks, saveFolder } from "./library";
 import { createListeners } from "./store";
@@ -10,6 +11,10 @@ export const canLinkFolders = typeof window !== "undefined" && typeof window.sho
 // Granted folder ids. Chromium grants last only for the session, so this starts empty on every launch.
 const granted = new Set<string>();
 const { emit, subscribe } = createListeners();
+
+export function isGranted(folderId: string): boolean {
+  return granted.has(folderId);
+}
 
 export function useGranted(folderId: string | null): boolean {
   return useSyncExternalStore(subscribe, () => (folderId ? granted.has(folderId) : true));
@@ -44,6 +49,7 @@ export async function requestAccess(folderId: string): Promise<boolean> {
   const ok = (await folder.handle.requestPermission({ mode: "read" })) === "granted";
   if (ok) granted.add(folder.id);
   emit();
+  if (ok) void startContentBackfill();
   return ok;
 }
 
@@ -92,16 +98,22 @@ export async function scanFolder(folder: LinkedFolder, onProgress: (p: Progress)
   const linkedPaths = new Set(linked.map((t) => (t.source as { path: string }).path));
   const foundPaths = new Set(found.map((f) => f.path));
 
-  const audio = found.filter((f) => isAudioFile({ name: f.handle.name, type: "" }) && !linkedPaths.has(f.path));
+  const ids = new Set(getTracks().map((t) => t.id));
+  // A known copy is skipped unread while the song it copies is still here.
+  const copies = Object.fromEntries(Object.entries(folder.copies ?? {}).filter(([path, id]) => foundPaths.has(path) && ids.has(id)));
+  const audio = found.filter((f) => isAudioFile({ name: f.handle.name, type: "" }) && !linkedPaths.has(f.path) && !copies[f.path]);
   const items = [];
   for (const f of audio) items.push({ file: await f.handle.getFile(), source: { kind: "linked" as const, folderId: folder.id, path: f.path } });
   const extras = await Promise.all(
     found.filter((f) => isExtraFile({ name: f.handle.name })).map(async (f) => ({ file: await f.handle.getFile(), path: f.path })),
   );
-  const summary = await importItems(items, extras, onProgress, signal);
+  const missing = linked.filter((t) => !foundPaths.has((t.source as { path: string }).path));
+  const summary = await importItems(items, extras, onProgress, signal, missing);
 
-  const gone = linked.filter((t) => !foundPaths.has((t.source as { path: string }).path));
-  await removeTracks(new Set(gone.map((t) => t.id)));
+  for (const c of summary.copies) copies[c.path] = c.id;
+  if (JSON.stringify(copies) !== JSON.stringify(folder.copies ?? {})) await saveFolder({ ...folder, copies });
+  const moved = new Set(summary.movedIds);
+  await removeTracks(new Set(missing.filter((t) => !moved.has(t.id)).map((t) => t.id)));
   return summary;
 }
 

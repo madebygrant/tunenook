@@ -305,12 +305,16 @@ type TrackPatch = Partial<Omit<Track, "id">>;
 
 // Memory first, so a tap shows at once and quick changes build on each other. One queued write saves whatever
 // memory holds by then; if it fails, memory goes back to what storage has.
-export function updateTracks(patches: ReadonlyMap<string, TrackPatch>, options: { now?: boolean; failure?: string } = {}): Promise<boolean> {
+// quiet is for fields no screen shows: memory and storage update now, and showQuietChanges publishes them later.
+export function updateTracks(
+  patches: ReadonlyMap<string, TrackPatch>,
+  options: { now?: boolean; quiet?: boolean; failure?: string } = {},
+): Promise<boolean> {
   const ids = [...patches.keys()].filter((id) => store.has(id));
   if (ids.length === 0) return Promise.resolve(false);
   for (const id of ids) putTrack({ ...store.get(id)!, ...patches.get(id) });
   if (options.now) publish();
-  else publishSoon();
+  else if (!options.quiet) publishSoon();
   return queueTrackWrite(async () => {
     const latest = ids.map((id) => store.get(id)).filter((t): t is Track => t !== undefined);
     if (latest.length === 0) return false;
@@ -326,6 +330,11 @@ export function updateTracks(patches: ReadonlyMap<string, TrackPatch>, options: 
       return false;
     }
   });
+}
+
+// After a run of quiet updates, so the snapshots stop lagging the store and getTracks stops copying it.
+export function showQuietChanges(): void {
+  if (dirty) publishSoon();
 }
 
 export function updateTrack(id: string, patch: TrackPatch, options: { now?: boolean; failure?: string } = {}): Promise<boolean> {

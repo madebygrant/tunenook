@@ -9,6 +9,7 @@ import '@fontsource/geist-mono/latin-400.css'
 import '@fontsource/geist-mono/latin-500.css'
 import './styles/app.css'
 import App from './App.tsx'
+import { startContentBackfill } from './lib/contentBackfill'
 import { checkAllAccess } from './lib/folders'
 import { loadLibrary } from './lib/library'
 import { initPlayer, restoreQueue } from './lib/player'
@@ -26,6 +27,7 @@ const seeded = import.meta.env.DEV
 void seeded
   .then(loadLibrary)
   .then(() => Promise.all([restoreQueue(), checkAllAccess()]))
+  .then(() => void startContentBackfill())
   .catch((e: unknown) => console.error('Library failed to load', e))
   .finally(() =>
     createRoot(document.getElementById('root')!).render(

@@ -1,3 +1,4 @@
+import { contentKey } from "./contentKey";
 import { safeFileName } from "./download";
 import { plural } from "./format";
 import { createPlaylist, editTracks, getPlaylists, getTracks, storedFile, updateTracks, type TagEdit } from "./library";
@@ -128,30 +129,48 @@ function samePlace(a: string[], b: string[]): boolean {
 }
 
 // Only songs added by this import get their likes, plays and edits back; songs already here keep their own. The size
-// must match too, since names like "Track 01.mp3" repeat. Playlists come back only when the backup brought songs in,
-// so rescanning a linked folder that holds a backup does nothing.
-export function restorePlan(backup: Backup, tracks: Track[], fresh: ReadonlySet<string>): RestorePlan {
-  const byName = new Map<string, Track[]>();
-  for (const t of tracks) {
-    const name = segments(trackPath(t)).at(-1);
-    if (name) byName.set(name, [...(byName.get(name) ?? []), t]);
+// must match too, since names like "Track 01.mp3" repeat. copies are picked files skipped as copies of songs already
+// here, found under the picked path. Playlists come back only when the pick held some of the backup's songs, so
+// rescanning a linked folder that holds a backup does nothing.
+export function restorePlan(
+  backup: Backup,
+  tracks: Track[],
+  fresh: ReadonlySet<string>,
+  copies: { path: string; id: string }[] = [],
+): RestorePlan {
+  const byId = new Map(tracks.map((t) => [t.id, t]));
+  const places = [
+    ...tracks.map((t) => ({ path: trackPath(t), track: t })),
+    ...copies.flatMap((c) => {
+      const track = byId.get(c.id);
+      return track ? [{ path: c.path, track }] : [];
+    }),
+  ];
+  const byName = new Map<string, { path: string; track: Track }[]>();
+  for (const place of places) {
+    const name = segments(place.path).at(-1);
+    if (name) byName.set(name, [...(byName.get(name) ?? []), place]);
   }
+  const copied = new Set(copies.map((c) => c.path));
+  let picked = 0;
   const idByPath = new Map<string, string>();
   const plan: RestorePlan = { tags: new Map(), stats: new Map(), playlists: [] };
   for (const saved of backup.tracks) {
     const want = segments(saved.path);
     const options = (byName.get(want.at(-1) ?? "") ?? []).filter(
-      (t) => samePlace(want, segments(trackPath(t))) && (!saved.size || !t.size || saved.size === t.size),
+      (o) => samePlace(want, segments(o.path)) && (!saved.size || !o.track.size || saved.size === o.track.size),
     );
-    const t = options.find((o) => fresh.has(o.id)) ?? options[0];
-    if (!t) continue;
+    const match = options.find((o) => fresh.has(o.track.id) || copied.has(o.path)) ?? options[0];
+    if (!match) continue;
+    const t = match.track;
     idByPath.set(saved.path, t.id);
+    if (fresh.has(t.id) || copied.has(match.path)) picked++;
     if (!fresh.has(t.id) || plan.stats.has(t.id)) continue;
     const changed = TAGS.filter((k) => saved[k] !== undefined && saved[k] !== t[k]);
     if (changed.length) plan.tags.set(t.id, Object.fromEntries(changed.map((k) => [k, saved[k]])));
     plan.stats.set(t.id, { addedAt: saved.addedAt, likedAt: saved.likedAt, playCount: saved.playCount, lastPlayedAt: saved.lastPlayedAt });
   }
-  if (plan.stats.size === 0) return plan;
+  if (picked === 0) return plan;
   for (const p of backup.playlists) {
     const found = p.paths.flatMap((path) => idByPath.get(path) ?? []);
     plan.playlists.push({ name: p.name, ids: found, missing: p.paths.length - found.length });
@@ -164,8 +183,12 @@ export function hasPlaylist(name: string, ids: string[]): boolean {
   return getPlaylists().some((p) => p.name === name && p.trackIds.join() === ids.join());
 }
 
-export async function restoreBackup(backup: Backup, fresh: ReadonlySet<string>): Promise<{ restored: number; playlists: number; missing: number }> {
-  const plan = restorePlan(backup, getTracks(), fresh);
+export async function restoreBackup(
+  backup: Backup,
+  fresh: ReadonlySet<string>,
+  copies: { path: string; id: string }[] = [],
+): Promise<{ restored: number; playlists: number; missing: number }> {
+  const plan = restorePlan(backup, getTracks(), fresh, copies);
   if (plan.tags.size) await editTracks(plan.tags);
   if (plan.stats.size) await updateTracks(plan.stats, { now: true, failure: "Couldn't restore likes and play counts." });
   let playlists = 0;
@@ -187,20 +210,9 @@ async function existing(dir: FileSystemDirectoryHandle, name: string): Promise<F
   }
 }
 
-const SAMPLE = 64 * 1024;
-
-// Same size and the same first and last 64 KB: enough to tell a song from an unrelated file of equal length
-// without reading the whole file back.
+// The same test the importer uses for a renamed copy, without reading the whole file back.
 async function sameBytes(a: Blob, b: Blob): Promise<boolean> {
-  if (a.size !== b.size) return false;
-  const parts = (x: Blob) => Promise.all([x.slice(0, SAMPLE).arrayBuffer(), x.slice(-SAMPLE).arrayBuffer()]);
-  const [[a1, a2], [b1, b2]] = await Promise.all([parts(a), parts(b)]);
-  const equal = (x: ArrayBuffer, y: ArrayBuffer) => {
-    const p = new Uint8Array(x);
-    const q = new Uint8Array(y);
-    return p.length === q.length && p.every((v, i) => v === q[i]);
-  };
-  return equal(a1, b1) && equal(a2, b2);
+  return a.size === b.size && (await contentKey(a)) === (await contentKey(b));
 }
 
 // Never overwrites. A matching file already there is left as it is; anything else gets the next free number.

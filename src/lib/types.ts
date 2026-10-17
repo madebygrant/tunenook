@@ -19,6 +19,8 @@ export interface Track {
   addedAt: number;
   // Matches files picked again, so a re-import skips them.
   sourceKey: string;
+  // Matches the same file under another name. Songs from before it existed get it filled in later.
+  contentKey?: string;
   source: TrackSource;
   playCount?: number;
   lastPlayedAt?: number;
@@ -31,6 +33,9 @@ export interface LinkedFolder {
   name: string;
   handle: FileSystemDirectoryHandle;
   addedAt: number;
+  // Files skipped as copies of a song already in the library, by path, with that song's id, so rescans skip them
+  // without reading them while that song is still here.
+  copies?: Record<string, string>;
 }
 
 export interface Playlist {

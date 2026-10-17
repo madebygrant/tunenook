@@ -49,6 +49,16 @@ describe("importFiles", () => {
     expect(library.getTracks()).toHaveLength(2);
   });
 
+  it("skips a renamed copy of a song already in the library, but not another file of the same size", async () => {
+    const { library, importer } = await load();
+    const audio = (name: string, text: string) => new File([text], name, { type: "audio/mpeg" });
+    await importer.importFiles([audio("01 Intro.mp3", "the same song")], () => {});
+    const summary = await importer.importFiles([audio("Intro (copy).mp3", "the same song"), audio("Other.mp3", "another song!")], () => {});
+    expect(summary).toMatchObject({ added: 1, duplicates: 1 });
+    expect(library.getTracks().map((t) => t.fileName).sort()).toEqual(["01 Intro.mp3", "Other.mp3"]);
+    expect(library.getTracks().every((t) => t.contentKey)).toBe(true);
+  });
+
   it("turns an m3u into a playlist, matching folders when names repeat", async () => {
     const { library, importer } = await load();
     const m3u = new File(["#EXTM3U\nAlbum B/01 Intro.mp3\nMissing.mp3\n"], "Mix.m3u", { type: "audio/x-mpegurl" });
@@ -87,5 +97,42 @@ describe("importFiles", () => {
       controller.signal,
     );
     expect(summary.added).toBe(2);
+  });
+});
+
+describe("copies and moves", () => {
+  const audio = (name: string, text: string, folder?: string) => {
+    const file = new File([text], name, { type: "audio/mpeg" });
+    if (folder) Object.defineProperty(file, "webkitRelativePath", { value: `${folder}/${name}` });
+    return file;
+  };
+
+  it("lets a playlist in the same pick find a song skipped as a renamed copy", async () => {
+    const { library, importer } = await load();
+    await importer.importFiles([audio("01 Intro.mp3", "the same song")], () => {});
+    const m3u = new File(["Album/Intro (copy).mp3\n"], "Mix.m3u8");
+    Object.defineProperty(m3u, "webkitRelativePath", { value: "Pick/Mix.m3u8" });
+    const summary = await importer.importFiles([audio("Intro (copy).mp3", "the same song", "Pick/Album"), m3u], () => {});
+    expect(summary).toMatchObject({ added: 0, duplicates: 1, playlists: 1, missingEntries: 0 });
+    expect(library.getPlaylists()[0].trackIds).toEqual([library.getTracks()[0].id]);
+  });
+
+  it("moves a linked song found at a new path instead of adding it again", async () => {
+    const { library, importer } = await load();
+    const source = (path: string) => ({ kind: "linked" as const, folderId: "f", path });
+    await importer.importItems([{ file: audio("Intro.mp3", "the same song"), source: source("Intro.mp3") }], [], () => {});
+    const [before] = library.getTracks();
+    await library.toggleLike(before.id);
+    const summary = await importer.importItems(
+      [{ file: audio("01 Intro.mp3", "the same song"), source: source("Album/01 Intro.mp3") }],
+      [],
+      () => {},
+      undefined,
+      [library.getTrack(before.id)!],
+    );
+    expect(summary).toMatchObject({ added: 0, duplicates: 0, movedIds: [before.id] });
+    expect(library.getTracks()).toHaveLength(1);
+    expect(library.getTrack(before.id)).toMatchObject({ source: source("Album/01 Intro.mp3"), fileName: "01 Intro.mp3" });
+    expect(library.getTrack(before.id)?.likedAt).toBeDefined();
   });
 });

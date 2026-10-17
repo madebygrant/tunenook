@@ -32,7 +32,7 @@ Risk: writes to the user's disk. Never overwrite existing files in the picked fo
 
 Exit criterion: standard check passes. Back up a library to a folder, clear site data, import the folder, and the songs and playlists come back.
 
-## Wave 3: better duplicate detection
+## Wave 3: better duplicate detection [done 2026-10-17]
 
 Goal: a renamed file isn't imported twice.
 

@@ -199,8 +199,9 @@ export function AddMusic() {
             <div className="confirm">
               <div>
                 <p className="muted">
-                  These songs need <b className="mono">{formatBytes(spaceWarning.needed)}</b> and about{" "}
-                  <b className="mono">{formatBytes(spaceWarning.free)}</b> is free.
+                  These songs need up to <b className="mono">{formatBytes(spaceWarning.needed)}</b> and about{" "}
+                  <b className="mono">{formatBytes(spaceWarning.free)}</b> is free. Songs already here under another file name
+                  are only found as they're read, so they're counted in that total but won't take space.
                 </p>
                 <p className="muted">TuneNook will add songs until the space runs out, or you can pick fewer.</p>
               </div>

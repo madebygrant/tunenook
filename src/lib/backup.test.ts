@@ -117,3 +117,14 @@ describe("importExtras", () => {
     expect(summary.restored).toBe(2);
   });
 });
+
+describe("restorePlan with copies", () => {
+  it("finds a backup song skipped as a copy under its picked path", () => {
+    const saved = [makeTrack("a", { path: "Album/01 One.mp3" })];
+    const backup = buildBackup(saved, [playlist("Mix", ["a"])], new Map(), 1);
+    const existing = makeTrack("old", { path: "Elsewhere/One.mp3" });
+    const plan = restorePlan(backup, [existing], new Set(), [{ path: "Backup/Album/01 One.mp3", id: "old" }]);
+    expect(plan.stats.size).toBe(0);
+    expect(plan.playlists).toEqual([{ name: "Mix", ids: ["old"], missing: 0 }]);
+  });
+});

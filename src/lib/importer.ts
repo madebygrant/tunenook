@@ -1,5 +1,6 @@
 import { hasPlaylist, isBackupFile, parseBackup, restoreBackup, type Backup } from "./backup";
-import { addTrack, albumCover, createPlaylist, getTracks, hasArt } from "./library";
+import { contentKey } from "./contentKey";
+import { addTrack, albumCover, createPlaylist, getTracks, hasArt, patchTrack } from "./library";
 import { isPlaylistFile, m3uEntries, matchEntries, playlistName, trackPath } from "./m3u";
 import { albumKey, guessFromFileName, isAudioFile, sourceKey } from "./tags";
 import type { Track, TrackSource } from "./types";
@@ -18,6 +19,10 @@ export interface ImportSummary {
   restored: number;
   outOfSpace: boolean;
   addedIds: string[];
+  // Picked files skipped as copies of songs already here, so playlists naming them still find the song.
+  copies: { path: string; id: string }[];
+  // Linked songs found at a new path in their folder and moved there.
+  movedIds: string[];
 }
 
 export function emptySummary(): ImportSummary {
@@ -32,6 +37,8 @@ export function emptySummary(): ImportSummary {
     restored: 0,
     outOfSpace: false,
     addedIds: [],
+    copies: [],
+    movedIds: [],
   };
 }
 
@@ -148,30 +155,60 @@ export interface ImportItem {
   source: TrackSource;
 }
 
-// One file at a time keeps memory flat: each file is read, written and released before the next.
+const itemPath = ({ file, source }: ImportItem) => (source.kind === "linked" ? source.path : file.webkitRelativePath || file.name);
+
+// One file at a time keeps memory flat: each file is read, written and released before the next. missing are
+// linked songs whose file has gone from its path; one found again under a new path is moved there, not re-added.
 export async function importItems(
   items: ImportItem[],
   extras: ExtraFile[],
   onProgress: (p: Progress) => void,
   signal?: AbortSignal,
+  missing: Track[] = [],
 ): Promise<ImportSummary> {
   const summary = emptySummary();
-  const known = new Set(getTracks().map((t) => t.sourceKey));
+  const lost = new Set(missing.map((t) => t.id));
+  const present = getTracks().filter((t) => !lost.has(t.id));
+  const bySource = new Map(present.map((t) => [t.sourceKey, t.id]));
+  const byContent = new Map(present.flatMap((t) => (t.contentKey ? [[t.contentKey, t.id] as const] : [])));
+  const movable = new Map(missing.map((t) => [t.contentKey ?? t.sourceKey, t]));
   const pendingArt = new Set<string>();
   let done = 0;
-  for (const { file, source } of items) {
+  for (const item of items) {
+    const { file, source } = item;
     if (signal?.aborted) break;
     onProgress({ done, total: items.length, current: file.name });
     done++;
     const key = sourceKey(file);
-    if (known.has(key)) {
+    const sameName = bySource.get(key);
+    if (sameName) {
       summary.duplicates++;
+      summary.copies.push({ path: itemPath(item), id: sameName });
       continue;
     }
     try {
+      // Checked after the name, since this reads part of the file.
+      const content = await contentKey(file);
+      const copyOf = byContent.get(content);
+      if (copyOf) {
+        summary.duplicates++;
+        summary.copies.push({ path: itemPath(item), id: copyOf });
+        continue;
+      }
+      const moved = source.kind === "linked" ? (movable.get(content) ?? movable.get(key)) : undefined;
+      if (moved && source.kind === "linked") {
+        movable.delete(moved.contentKey ?? moved.sourceKey);
+        await patchTrack(moved.id, { source, path: source.path, fileName: file.name, sourceKey: key, contentKey: content });
+        summary.movedIds.push(moved.id);
+        bySource.set(key, moved.id);
+        byContent.set(content, moved.id);
+        continue;
+      }
       const read = await readTrack(file, source, pendingArt);
+      read.track.contentKey = content;
       await addTrack({ track: read.track, art: read.art, file: source.kind === "copied" ? file : undefined });
-      known.add(key);
+      bySource.set(key, read.track.id);
+      byContent.set(content, read.track.id);
       summary.added++;
       summary.addedIds.push(read.track.id);
       if (!read.tagged) summary.untagged++;
@@ -209,21 +246,24 @@ export async function importExtras(files: ExtraFile[], summary: ImportSummary): 
     if (backup && (!latest || backup.exportedAt > latest.backup.exportedAt)) latest = { backup, folder: folderOf(path) };
   }
   if (latest) {
-    const result = await restoreBackup(latest.backup, new Set(summary.addedIds));
+    const result = await restoreBackup(latest.backup, new Set(summary.addedIds), summary.copies);
     summary.restored += result.restored;
     summary.playlists += result.playlists;
     summary.missingEntries += result.missing;
   }
-  const copies = latest ? [latest.folder, "Playlists"].filter(Boolean).join("/") : null;
+  const backupCopies = latest ? [latest.folder, "Playlists"].filter(Boolean).join("/") : null;
   await importPlaylists(
-    files.filter((f) => isPlaylistFile(f.file) && folderOf(f.path) !== copies).map((f) => f.file),
+    files.filter((f) => isPlaylistFile(f.file) && folderOf(f.path) !== backupCopies).map((f) => f.file),
     summary,
   );
 }
 
 async function importPlaylists(files: File[], summary: ImportSummary): Promise<void> {
   const fresh = new Set(summary.addedIds);
-  const candidates = getTracks().map((t) => ({ id: t.id, path: trackPath(t), fresh: fresh.has(t.id) }));
+  const candidates = [
+    ...getTracks().map((t) => ({ id: t.id, path: trackPath(t), fresh: fresh.has(t.id) })),
+    ...summary.copies.map((c) => ({ id: c.id, path: c.path, fresh: true })),
+  ];
   for (const file of files) {
     const { ids, missing } = matchEntries(m3uEntries(await file.text()), candidates);
     summary.missingEntries += missing;
@@ -234,7 +274,8 @@ async function importPlaylists(files: File[], summary: ImportSummary): Promise<v
   }
 }
 
-// Space a pick will take: files already in the library are skipped as duplicates, so they don't count.
+// Most space a pick can take. Files already here under the same name are left out; renamed copies can only be
+// spotted by reading them, so they're counted.
 export function bytesToImport(files: { name: string; size: number; type: string }[], tracks: { sourceKey: string }[]): number {
   const known = new Set(tracks.map((t) => t.sourceKey));
   return files.filter((f) => isAudioFile(f) && !known.has(sourceKey(f))).reduce((sum, f) => sum + f.size, 0);
