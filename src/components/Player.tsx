@@ -127,7 +127,7 @@ function VolumeControl({ muted }: { muted: boolean }) {
   );
 }
 
-export function Player({ onNavigate }: { onNavigate: (view: View) => void }) {
+export function Player({ onNavigate, onShowCurrent }: { onNavigate: (view: View) => void; onShowCurrent: () => void }) {
   const now = useNowPlaying();
   const queue = useQueue();
   const byId = useTrackMap();
@@ -329,6 +329,15 @@ export function Player({ onNavigate }: { onNavigate: (view: View) => void }) {
                 </>
               )}
             </div>
+            <button
+              className="show-link"
+              onClick={() => {
+                setExpanded(false);
+                onShowCurrent();
+              }}
+            >
+              {track.source.kind === "session" ? "Show in queue" : "Show in library"}
+            </button>
           </div>
           {seekRow(false)}
           <div className="sheet-controls">

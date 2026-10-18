@@ -57,6 +57,9 @@ export default function App() {
   const drawer = useMediaQuery("(max-width: 959px)");
   const nowTrack = now.id ? byId.get(now.id) : undefined;
   const hasDock = nowTrack !== undefined;
+  // A song the player asked the list to land on; cleared once the list has scrolled to it.
+  const [focusTrack, setFocusTrack] = useState<string | null>(null);
+  const pendingFocus = useRef(false);
 
 
   useEffect(() => {
@@ -64,7 +67,11 @@ export default function App() {
       followed.current = false;
       return;
     }
-    main.current?.scrollTo(0, 0);
+    // A jump to the current song scrolls itself, so the top-of-page reset would undo it. Consumed here,
+    // since the list clears the focus request during its own layout pass, before this effect runs.
+    const jumped = pendingFocus.current;
+    pendingFocus.current = false;
+    if (!jumped) main.current?.scrollTo(0, 0);
     // Moving focus to the heading announces the new view; the first render keeps the browser default.
     if (navigated.current) main.current?.querySelector("h1")?.focus({ preventScroll: true });
   }, [view]);
@@ -167,6 +174,20 @@ export default function App() {
     setToast({ message, action: undo && { label: "Undo", icon: <UndoIcon />, run: undo } });
   }, []);
 
+  // The player's "Show in library": land on the playing row in the list, or the queue for a song that isn't saved.
+  const showCurrent = useCallback(() => {
+    if (!nowTrack) return;
+    if (nowTrack.source.kind === "session") {
+      navigate({ kind: "queue" });
+      return;
+    }
+    pendingFocus.current = true;
+    setFocusTrack(nowTrack.id);
+    navigate({ kind: "songs" });
+  }, [nowTrack, navigate]);
+
+  const clearFocus = useCallback(() => setFocusTrack(null), []);
+
   const follow = useCallback((next: View) => {
     followed.current = true;
     replaceView(next);
@@ -259,8 +280,18 @@ export default function App() {
               </div>
             </div>
           </section>
-        ) : !loaded ? null : view.kind === "songs" ? (
-          <Songs onMore={(t) => openMenu(t, { kind: "library" })} onAdd={() => navigate({ kind: "add" })} onToast={showToast} />
+        ) : !loaded ? (
+          <section aria-label="Opening your library">
+            <p className="muted">Opening your library…</p>
+          </section>
+        ) : view.kind === "songs" ? (
+          <Songs
+            onMore={(t) => openMenu(t, { kind: "library" })}
+            onAdd={() => navigate({ kind: "add" })}
+            onToast={showToast}
+            focusId={focusTrack}
+            onFocused={clearFocus}
+          />
         ) : view.kind === "albums" ? (
           <Albums onOpen={(key) => navigate({ kind: "album", key })} onAdd={() => navigate({ kind: "add" })} />
         ) : view.kind === "album" ? (
@@ -333,7 +364,7 @@ export default function App() {
 
       {nowTrack && (
         <div className="player-dock" id="player">
-          <Player onNavigate={navigate} />
+          <Player onNavigate={navigate} onShowCurrent={showCurrent} />
         </div>
       )}
     </div>

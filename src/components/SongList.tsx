@@ -21,9 +21,11 @@ interface Props {
   selection?: Selection;
   // Rows get a handle that drags, or moves with the arrow keys.
   onReorder?: (from: number, to: number) => void;
+  // A row that must stay mounted even when the list is windowed, so it can be scrolled to.
+  pinnedIndex?: number | null;
 }
 
-export function SongList({ tracks, currentIndex, playing, numbered, showAlbum = true, onPlay, onMore, label, selection, onReorder }: Props) {
+export function SongList({ tracks, currentIndex, playing, numbered, showAlbum = true, onPlay, onMore, label, selection, onReorder, pinnedIndex }: Props) {
   const selecting = selection?.active ? selection : null;
   const list = useRef<HTMLUListElement>(null);
   // Keyed by song rather than position, so a moved row keeps its element and its handle keeps focus.
@@ -43,7 +45,7 @@ export function SongList({ tracks, currentIndex, playing, numbered, showAlbum = 
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const focused = windowed && focusedKey !== null ? keys.indexOf(focusedKey) : -1;
   const runs = windowed
-    ? rowRuns(tracks.length, { start: range.start, end: Math.min(range.end, tracks.length) }, [focused, drag?.from])
+    ? rowRuns(tracks.length, { start: range.start, end: Math.min(range.end, tracks.length) }, [focused, drag?.from, pinnedIndex ?? null])
     : [{ from: 0, to: tracks.length }];
   const gapHeight = range.rowHeight || 64;
 

@@ -98,7 +98,7 @@ Buttons, inputs, sidebar, dialogs, toast and focus follow Podnook's rules: three
 64px row with a hairline below: 40px art (or the track number on album pages), title in `title`, "artist · album" in `small` muted, duration in `value`, and a More button. The whole row plays the list from that song; the loaded song's row gets `lamp-wash`, a 2px lamp bar and a lamp play or pause glyph over its art. Rows use `content-visibility: auto` so libraries in the thousands scroll smoothly.
 
 ### Song menu
-A `surface` dialog (a bottom sheet on phone width) headed by the title and artist. Actions are full-width 48px text rows with hairlines: Play next, Add to queue, Add to playlist…, Go to album, then context actions (Move up or down and Remove from playlist, Remove from queue, Copy into TuneNook for linked songs, Remove from library…). Removals are in `danger` text and confirm first.
+A `surface` dialog (a bottom sheet on phone width) headed by the title and artist. Actions are full-width 48px text rows with hairlines, grouped with an 8px gap: Play next and Add to queue; Add to playlist…, Like and Edit details…; Go to album and Go to artist; context actions (Move up or down, Copy into TuneNook for linked songs); then the removals (Remove from playlist, Remove from queue, Remove from library…) in `danger` text, which confirm first.
 
 ### Tiles
 Albums and playlists use Podnook's show tiles: square art, title in `title`, a `small` note (artist and year, or song count and total time).

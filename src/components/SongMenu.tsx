@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import { Fragment, useRef, useState, type ReactNode } from "react";
 import { plural } from "../lib/format";
 import { canLinkFolders, copyIntoLibrary, NeedsAccessError, requestAccess } from "../lib/folders";
 import { addToPlaylist, artistPageFor, hasAlbum, createPlaylist, toggleLike, getPlaylists, removeTracksSafely, savePlaylist, trackAlbumKey, usePlaylists } from "../lib/library";
@@ -64,43 +64,47 @@ export function SongMenu({ target, onClose, onNavigate, onEdited, onToast }: Pro
     }
   }
 
+  // Grouped by what they do, so the removals stay apart from the everyday actions. The gap is the only divider.
   const items: MenuItem[] = [
-    { label: "Play next", run: () => run(() => playNext([track.id]), `${track.title} plays next.`) },
-    { label: "Add to queue", run: () => run(() => addToQueue([track.id]), `Added ${track.title} to the queue.`) },
+    { group: "play", label: "Play next", run: () => run(() => playNext([track.id]), `${track.title} plays next.`) },
+    { group: "play", label: "Add to queue", run: () => run(() => addToQueue([track.id]), `Added ${track.title} to the queue.`) },
   ];
   // A song played without adding isn't saved, so playlists, likes and edits would point at nothing next time.
   if (track.source.kind !== "session") {
     items.push(
-      { label: "Add to playlist…", run: () => setStep("pick") },
-      { label: track.likedAt === undefined ? "Like" : "Unlike", run: () => run(() => void toggleLike(track.id)) },
-      { label: "Edit details…", run: () => setStep("edit") },
+      { group: "collect", label: "Add to playlist…", run: () => setStep("pick") },
+      { group: "collect", label: track.likedAt === undefined ? "Like" : "Unlike", run: () => run(() => void toggleLike(track.id)) },
+      { group: "collect", label: "Edit details…", run: () => setStep("edit") },
     );
   }
   // A song played without adding may be from an album that isn't in the library.
   const album = track.album ? trackAlbumKey(track) : null;
   if (album && hasAlbum(album)) {
-    items.push({ label: "Go to album", run: () => run(() => onNavigate({ kind: "album", key: album })) });
+    items.push({ group: "navigate", label: "Go to album", run: () => run(() => onNavigate({ kind: "album", key: album })) });
   }
   const artist = artistPageFor(track);
-  if (artist) items.push({ label: "Go to artist", run: () => run(() => onNavigate({ kind: "artist", key: artist })) });
+  if (artist) items.push({ group: "navigate", label: "Go to artist", run: () => run(() => onNavigate({ kind: "artist", key: artist })) });
   if (context.kind === "playlist" && playlist) {
-    const { index, row } = context;
-    const now = Date.now();
+    const { row } = context;
     const last = visiblePositions(playlist).length - 1;
     const move = (to: number) => () => run(() => movePlaylistRow(playlist.id, row, to));
-    if (row > 0) items.push({ label: "Move to top", run: move(0) }, { label: "Move up", run: move(row - 1) });
-    if (row < last) items.push({ label: "Move down", run: move(row + 1) }, { label: "Move to bottom", run: move(last) });
+    if (row > 0) items.push({ group: "context", label: "Move to top", run: move(0) }, { group: "context", label: "Move up", run: move(row - 1) });
+    if (row < last) items.push({ group: "context", label: "Move down", run: move(row + 1) }, { group: "context", label: "Move to bottom", run: move(last) });
+  }
+  if (canLinkFolders && track.source.kind === "linked") items.push({ group: "context", label: "Copy into TuneNook", run: () => void copy() });
+  if (context.kind === "playlist" && playlist) {
+    const { index } = context;
     items.push({
+      group: "danger",
       label: "Remove from playlist",
       danger: true,
-      run: () => editPlaylist((p) => withoutIndexes(p, new Set([index]), now), `Removed ${track.title} from ${playlist.name}.`),
+      run: () => editPlaylist((p) => withoutIndexes(p, new Set([index]), Date.now()), `Removed ${track.title} from ${playlist.name}.`),
     });
   }
   if (context.kind === "queue") {
-    items.push({ label: "Remove from queue", danger: true, run: () => run(() => removeFromQueue([context.pos])) });
+    items.push({ group: "danger", label: "Remove from queue", danger: true, run: () => run(() => removeFromQueue([context.pos])) });
   }
-  if (canLinkFolders && track.source.kind === "linked") items.push({ label: "Copy into TuneNook", run: () => void copy() });
-  if (context.kind === "library") items.push({ label: "Remove from library…", danger: true, run: () => setStep("confirm") });
+  if (context.kind === "library") items.push({ group: "danger", label: "Remove from library…", danger: true, run: () => setStep("confirm") });
 
   return (
     <MenuSheet label={`${track.title} options`} title={track.title} subtitle={track.artist} onClose={onClose}>
@@ -128,6 +132,8 @@ export interface MenuItem {
   label: string;
   run: () => void;
   danger?: boolean;
+  // Items with the same group sit together; a gap marks the seam between groups.
+  group?: string;
   // Opens a file picker instead; run is called once a file is chosen.
   pick?: { accept: string; onPick: (file: File) => void };
 }
@@ -164,16 +170,19 @@ export function MenuSheet({
 function MenuList({ items }: { items: MenuItem[] }) {
   return (
     <ul className="menu-list">
-      {items.map((item) => (
-        <li key={item.label}>
-          {item.pick ? (
-            <FileMenuItem item={item} pick={item.pick} />
-          ) : (
-            <button className={`menu-item${item.danger ? " is-danger" : ""}`} onClick={item.run}>
-              {item.label}
-            </button>
-          )}
-        </li>
+      {items.map((item, i) => (
+        <Fragment key={item.label}>
+          {i > 0 && item.group !== items[i - 1].group && <li className="menu-gap" aria-hidden="true" />}
+          <li>
+            {item.pick ? (
+              <FileMenuItem item={item} pick={item.pick} />
+            ) : (
+              <button className={`menu-item${item.danger ? " is-danger" : ""}`} onClick={item.run}>
+                {item.label}
+              </button>
+            )}
+          </li>
+        </Fragment>
       ))}
     </ul>
   );

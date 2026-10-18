@@ -1,4 +1,4 @@
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useLayoutEffect, useMemo, useState } from "react";
 import { compareText, plural } from "../lib/format";
 import { useTracks } from "../lib/library";
 import { playTracks } from "../lib/player";
@@ -57,10 +57,15 @@ export function Songs({
   onMore,
   onAdd,
   onToast,
+  focusId,
+  onFocused,
 }: {
   onMore: (track: Track) => void;
   onAdd: () => void;
   onToast: (message: string) => void;
+  // A song to land on when the page opens, so the player can jump here to the current row.
+  focusId?: string | null;
+  onFocused?: () => void;
 }) {
   const tracks = useTracks();
   const [query, setQuery] = useState("");
@@ -79,6 +84,22 @@ export function Songs({
   const { currentIndex, playing, onPlay } = useListPlayback(shown);
   const ids = shown.map((t) => t.id);
   const selection = useSelection(shown);
+  const focusIndex = focusId ? shown.findIndex((t) => t.id === focusId) : -1;
+  // A search that hides the song we're landing on would leave nothing to scroll to, so it clears itself.
+  const [handledFocus, setHandledFocus] = useState<string | null>(null);
+  if ((focusId ?? null) !== handledFocus) {
+    setHandledFocus(focusId ?? null);
+    if (focusId && focusIndex < 0 && query) setQuery("");
+  }
+
+  // Landing on a song from the player: the row is brought to the middle once it's mounted.
+  useLayoutEffect(() => {
+    if (!focusId || focusIndex < 0) return;
+    const row = document.querySelector<HTMLElement>(`.main .songs [data-index="${focusIndex}"]`);
+    if (!row) return;
+    row.scrollIntoView?.({ block: "center" });
+    onFocused?.();
+  }, [focusId, focusIndex, onFocused]);
 
   function changeSort(next: Sort) {
     setSort(next);
@@ -152,6 +173,7 @@ export function Songs({
               onPlay={onPlay}
               onMore={(i) => onMore(shown[i])}
               selection={selection}
+              pinnedIndex={focusIndex >= 0 ? focusIndex : null}
             />
           )}
           {sortOpen && (
