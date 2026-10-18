@@ -1,8 +1,8 @@
 import { hasPlaylist, isBackupFile, parseBackup, restoreBackup, type Backup } from "./backup";
 import { contentKey } from "./contentKey";
-import { addTrack, albumCover, createPlaylist, getTracks, hasArt, patchTrack } from "./library";
+import { addTrack, albumCover, createPlaylist, getTracks, hasArt, patchTrack, trackAlbumKey } from "./library";
 import { isPlaylistFile, m3uEntries, matchEntries, playlistName, trackPath } from "./m3u";
-import { albumKey, guessFromFileName, isAudioFile, sourceKey } from "./tags";
+import { guessFromFileName, isAudioFile, sourceKey } from "./tags";
 import type { Track, TrackSource } from "./types";
 
 const ART_SIZE = 512;
@@ -110,8 +110,8 @@ export async function readTrack(file: File, source: TrackSource, pendingArt: Set
   // Compilations without an album artist would otherwise split into one album per track artist.
   const albumArtist = c?.albumartist?.trim() || (c?.compilation ? "Various artists" : artist);
   const id = crypto.randomUUID();
-  const existing = album ? albumCover(albumKey(albumArtist, album)) : null;
-  const artId = existing ?? (album ? `album:${albumKey(albumArtist, album)}` : `track:${id}`);
+  const existing = album ? albumCover(trackAlbumKey({ albumArtist, artist, album })) : null;
+  const artId = existing ?? (album ? `album:${trackAlbumKey({ albumArtist, artist, album })}` : `track:${id}`);
 
   let art: ReadTrack["art"];
   const cover = selectCover(c?.picture);

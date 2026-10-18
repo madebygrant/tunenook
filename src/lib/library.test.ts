@@ -40,7 +40,7 @@ describe("library", () => {
 
   it("gives earlier songs of an album its cover when a later song brings it", async () => {
     const { library } = await load();
-    const albumArt = "album:artist\nlamplight";
+    const albumArt = "album:lamplight";
     await library.addTrack({ track: makeTrack("a", { album: "Lamplight" }) });
     await library.addTrack({ track: makeTrack("b", { album: "Lamplight", artId: albumArt }), art: art(albumArt) });
     expect(library.getTrack("a")?.artId).toBe(albumArt);
@@ -156,12 +156,27 @@ describe("groupArtists", () => {
     expect(artist.albums.map((a) => a.tracks.map((t) => t.id))).toEqual([["real"]]);
     expect(artist.songs.map((t) => t.id)).toEqual(["untagged"]);
   });
+
+  it("groups songs that list different artists but share an album name into one album", async () => {
+    const { groupAlbums, groupArtists } = await import("./library");
+    const tracks = [
+      makeTrack("a", { artist: "Queen", albumArtist: "", album: "Hits" }),
+      makeTrack("b", { artist: "Queen feat. Bowie", albumArtist: "", album: "Hits " }),
+    ];
+    const albums = groupAlbums(tracks);
+    expect(albums.map((a) => a.tracks.map((t) => t.id))).toEqual([["a", "b"]]);
+    const [owner, guest] = groupArtists(albums);
+    expect(owner.albums[0].tracks.map((t) => t.id)).toEqual(["a", "b"]);
+    expect(guest.albums).toEqual([]);
+    expect(guest.appearsOn[0].tracks.map((t) => t.id)).toEqual(["a", "b"]);
+    expect(guest.tracks.map((t) => t.id)).toEqual(["b"]);
+  });
 });
 
 describe("editTracks", () => {
   it("moves an untagged song onto an album and gives it that album's cover", async () => {
     const { library, db } = await load();
-    const albumArt = "album:queen\ninnuendo";
+    const albumArt = "album:innuendo";
     await library.addTrack({ track: makeTrack("a", { artist: "Queen", albumArtist: "Queen", album: "Innuendo", artId: albumArt }), art: art(albumArt) });
     await library.addTrack({ track: makeTrack("b", { artId: "track:b" }), art: art("track:b") });
     expect(await library.editTracks(new Map([["b", { artist: "Queen", albumArtist: "Queen", album: "Innuendo" }]]))).toBe(true);
@@ -173,7 +188,7 @@ describe("editTracks", () => {
 
   it("keeps a song's cover when its new album has none, and leaves the old album's cover to the songs still on it", async () => {
     const { library, db } = await load();
-    const old = "album:artist\nlamplight";
+    const old = "album:lamplight";
     for (const id of ["a", "b"]) await library.addTrack({ track: makeTrack(id, { album: "Lamplight", artId: old }), art: art(old) });
     await library.editTracks(new Map([["a", { album: "Ember" }]]));
     const copy = library.getTrack("a")?.artId;
@@ -185,7 +200,7 @@ describe("editTracks", () => {
 
   it("gives a renamed album its own copy of the cover, so the old name's cover is free for that album", async () => {
     const { library, db } = await load();
-    const old = "album:artist\nlamplight";
+    const old = "album:lamplight";
     for (const id of ["a", "b"]) await library.addTrack({ track: makeTrack(id, { album: "Lamplight", artId: old }), art: art(old) });
     await library.editTracks(new Map(["a", "b"].map((id) => [id, { album: "Ember" }])));
     const copy = library.getTrack("a")?.artId;

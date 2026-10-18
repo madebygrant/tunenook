@@ -74,9 +74,11 @@ function reportError(message: string, e: unknown): void {
   errorListeners.forEach((listener) => listener(message));
 }
 
-// Untagged songs get an empty album name in the key, so they never merge with an album really called "Unknown album".
+// Tagged albums group by album name, so one album stays whole when its songs list different artists.
+// Untagged songs keep the artist in the key, so they never merge with each other or with an album really called "Unknown album".
 export function trackAlbumKey(t: Pick<Track, "albumArtist" | "artist" | "album">): string {
-  return albumKey(t.albumArtist || t.artist, t.album);
+  if (!t.album) return albumKey(t.albumArtist || t.artist, t.album);
+  return t.album.trim().toLowerCase();
 }
 
 export function groupAlbums(list: Track[]): Album[] {
@@ -92,7 +94,14 @@ export function groupAlbums(list: Track[]): Album[] {
     album.artId ??= t.artId;
     album.year ??= t.year;
   }
-  for (const album of groups.values()) album.tracks.sort(byDiscAndTrack);
+  // The album's artist and title come from its place in the track order, not import order, so a
+  // merged album keeps the same artist between restarts, when memory order differs from the store's.
+  for (const album of groups.values()) {
+    album.tracks.sort(byDiscAndTrack);
+    const named = album.tracks.find((t) => t.albumArtist);
+    album.artist = named?.albumArtist || album.tracks[0].artist;
+    album.title = named?.album || album.tracks[0].album;
+  }
   return [...groups.values()].sort((a, b) => compareText(a.title, b.title) || compareText(a.artist, b.artist));
 }
 
@@ -305,7 +314,7 @@ export function addTrack({ track, file, art }: NewTrack): Promise<void> {
       if (art.id.startsWith("album:")) {
         const key = art.id.slice("album:".length);
         for (const t of store.values()) {
-          if (t.artId || !t.album || albumKey(t.albumArtist || t.artist, t.album) !== key) continue;
+          if (t.artId || !t.album || trackAlbumKey(t) !== key) continue;
           backfill.push(t.id);
           writes.push({ store: "tracks", op: "put", value: { ...t, artId: art.id } });
         }

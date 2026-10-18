@@ -1,7 +1,7 @@
 import { useEffect, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { requestAccess } from "../lib/folders";
 import { formatClock } from "../lib/format";
-import { artistPageFor, hasAlbum, toggleLike, useTrackMap } from "../lib/library";
+import { artistPageFor, hasAlbum, toggleLike, trackAlbumKey, useTrackMap } from "../lib/library";
 import {
   cycleRepeat,
   getNowPlaying,
@@ -28,7 +28,6 @@ import {
 import { isIOS } from "../lib/standalone";
 import { isShortcut } from "../lib/keys";
 import { idAt } from "../lib/queue";
-import { albumKey } from "../lib/tags";
 import { Dialog } from "./Dialog";
 import { ChevronDownIcon, CloseIcon, HeartIcon, MoonIcon, MutedIcon, NextIcon, PauseIcon, PlayIcon, PrevIcon, RefreshIcon, RepeatIcon, RepeatOneIcon, ShuffleIcon, VolumeIcon } from "./icons";
 import type { View } from "./Sidebar";
@@ -273,7 +272,7 @@ export function Player({ onNavigate }: { onNavigate: (view: View) => void }) {
       </div>
     );
 
-  const albumKeyOf = track.album ? albumKey(track.albumArtist || track.artist, track.album) : null;
+  const albumKeyOf = track.album ? trackAlbumKey(track) : null;
   // A song played without adding may be from an album that isn't in the library.
   const albumView: View | null = albumKeyOf && hasAlbum(albumKeyOf) ? { kind: "album", key: albumKeyOf } : null;
   const artistKey = artistPageFor(track);
