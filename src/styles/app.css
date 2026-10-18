@@ -941,8 +941,8 @@ mark {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--s, 44px);
-  height: var(--s, 44px);
+  width: var(--s, 36px);
+  height: var(--s, 36px);
   padding: 0;
   border: 0;
   background: var(--lamp);
@@ -1660,6 +1660,9 @@ kbd {
   .xh-btn--icon,
   .xh-btn--icon.xh-btn--sm {
     width: 44px;
+  }
+  .xh-play {
+    --s: 40px;
   }
   .seek {
     height: 44px;
