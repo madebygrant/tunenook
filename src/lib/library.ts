@@ -185,6 +185,13 @@ export function getTracks(): Track[] {
   return dirty ? [...store.values()] : tracks;
 }
 
+// Bytes of audio TuneNook holds in its own storage. Linked files stay where they are, so they aren't counted.
+export function storedBytes(): number {
+  let total = 0;
+  for (const t of store.values()) if (t.source.kind === "copied") total += t.size;
+  return total;
+}
+
 export function getTrack(id: string): Track | undefined {
   return store.get(id) ?? session.get(id)?.track;
 }

@@ -46,6 +46,14 @@ describe("library", () => {
     expect(library.getTrack("a")?.artId).toBe(albumArt);
   });
 
+  it("counts only the audio it stores toward stored bytes", async () => {
+    const { library } = await load();
+    await library.addTrack({ track: makeTrack("a", { size: 100 }) });
+    await library.addTrack({ track: makeTrack("b", { size: 50 }) });
+    await library.addTrack({ track: makeTrack("c", { size: 999, source: { kind: "linked", folderId: "f", path: "c.mp3" } }) });
+    expect(library.storedBytes()).toBe(150);
+  });
+
   it("leaves a linked song's file alone when it's removed", async () => {
     const { library } = await load();
     const writes = vi.spyOn(await import("./db"), "write");

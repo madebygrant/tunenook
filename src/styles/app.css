@@ -1016,7 +1016,7 @@ mark {
   align-items: center;
   flex-wrap: nowrap;
   gap: 20px;
-  min-height: 80px;
+  min-height: 72px;
   padding: 0 24px;
   background: var(--canvas-deep);
   border-top: 1px solid var(--border);

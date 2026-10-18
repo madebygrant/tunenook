@@ -1,4 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { storedBytes } from "./library";
 import { createListeners } from "./store";
 
 export interface StorageInfo {
@@ -19,7 +20,9 @@ export async function estimateStorage(): Promise<StorageInfo | null> {
   const estimate = await navigator.storage?.estimate?.().catch(() => undefined);
   if (!estimate?.quota) return null;
   const persisted = (await navigator.storage?.persisted?.().catch(() => false)) ?? false;
-  return { usage: estimate.usage ?? 0, quota: estimate.quota, persisted };
+  // WebKit reports a usage that leaves out the audio it holds, so never show less than the songs TuneNook stores.
+  const usage = Math.max(estimate.usage ?? 0, storedBytes());
+  return { usage, quota: estimate.quota, persisted };
 }
 
 export async function freeBytes(): Promise<number | null> {
