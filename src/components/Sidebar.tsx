@@ -29,10 +29,10 @@ const FOCUSABLE = "button:not([disabled]), a[href]";
 const DOCK_FOCUSABLE = ".player-dock button:not([disabled]), .player-dock a[href]";
 
 const ITEMS: { kind: View["kind"]; label: string; icon: ReactNode; also?: View["kind"][] }[] = [
-  { kind: "songs", label: "Songs", icon: <SongsIcon /> },
   { kind: "albums", label: "Albums", icon: <AlbumIcon />, also: ["album"] },
-  { kind: "artists", label: "Artists", icon: <ArtistIcon />, also: ["artist"] },
   { kind: "playlists", label: "Playlists", icon: <PlaylistIcon />, also: ["playlist", "liked"] },
+  { kind: "songs", label: "Songs", icon: <SongsIcon /> },
+  { kind: "artists", label: "Artists", icon: <ArtistIcon />, also: ["artist"] },
   { kind: "queue", label: "Queue", icon: <QueueIcon /> },
   { kind: "review", label: "Review", icon: <ReviewIcon /> },
   { kind: "add", label: "Add music", icon: <AddMusicIcon />, also: ["storage"] },

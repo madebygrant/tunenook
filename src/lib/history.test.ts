@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { View } from "../components/Sidebar";
-import { onViewPop, openLayer, pushView, viewFromHash, viewHash } from "./history";
+import { launchView, onViewPop, openLayer, pushView, viewFromHash, viewHash } from "./history";
 
 const VIEWS: View[] = [
   { kind: "songs" },
@@ -29,6 +29,16 @@ describe("viewHash and viewFromHash", () => {
     for (const hash of ["", "#", "#/", "#/nope", "#/songs/extra", "#/album", "#/album/%E0%A4%A", "#songs"]) {
       expect(viewFromHash(hash)).toBeNull();
     }
+  });
+});
+
+describe("launchView", () => {
+  it("opens on Albums with no address, the saved page with one, and Add music for an empty library", () => {
+    history.replaceState(null, "", "#");
+    expect(launchView(false)).toEqual({ kind: "albums" });
+    history.replaceState(null, "", "#/queue");
+    expect(launchView(false)).toEqual({ kind: "queue" });
+    expect(launchView(true)).toEqual({ kind: "add" });
   });
 });
 
@@ -117,15 +127,15 @@ describe("layers", () => {
     expect(history.state).toBeNull();
   });
 
-  it("replaces an unknown hash reached by Back with Songs", async () => {
+  it("replaces an unknown hash reached by Back with Albums", async () => {
     const onView = vi.fn();
     const stop = onViewPop(onView);
     history.pushState(null, "", "#/nope");
-    history.pushState(null, "", "#/albums");
+    history.pushState(null, "", "#/songs");
     history.back();
     await settle();
-    expect(location.hash).toBe("#/songs");
-    expect(onView).toHaveBeenCalledWith({ kind: "songs" });
+    expect(location.hash).toBe("#/albums");
+    expect(onView).toHaveBeenCalledWith({ kind: "albums" });
     stop();
   });
 });

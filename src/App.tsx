@@ -17,7 +17,7 @@ import { StoragePage } from "./components/StoragePage";
 import { Button } from "./components/ui";
 import { useAnnouncement } from "./lib/announce";
 import { isShortcut } from "./lib/keys";
-import { currentView, onViewPop, pushView, replaceView, startHistory, viewHash } from "./lib/history";
+import { launchView, onViewPop, pushView, replaceView, startHistory, viewHash } from "./lib/history";
 import { artistKey, getTracks, hasAlbum, hasArtist, onStorageError, trackAlbumKey, useAlbums, useArtists, useLibraryLoaded, useLoadError, usePlaylists, useTrackMap } from "./lib/library";
 import { useNowPlaying } from "./lib/player";
 import { applyUpdate, useReloadPending, useUpdateReady } from "./lib/pwa";
@@ -40,9 +40,7 @@ export default function App() {
   const playlists = usePlaylists();
   const now = useNowPlaying();
   // Decided once at launch, so the first import doesn't move the page away from its own progress.
-  const [initialView] = useState<View>(() =>
-    getTracks().length === 0 ? { kind: "add" } : (currentView() ?? { kind: "songs" }),
-  );
+  const [initialView] = useState<View>(() => launchView(getTracks().length === 0));
   const [view, setView] = useState(initialView);
   const [navOpen, setNavOpen] = useState(false);
   const [menu, setMenu] = useState<MenuTarget | null>(null);

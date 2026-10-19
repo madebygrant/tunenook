@@ -1,7 +1,8 @@
 import { useEffect, useRef, type RefObject } from "react";
 import type { View } from "../components/Sidebar";
 
-const SONGS: View = { kind: "songs" };
+// Where the app opens, and where an unknown address lands. Keep it the first item in the side menu.
+export const START_VIEW: View = { kind: "albums" };
 const PLAIN_KINDS = new Set<string>(["songs", "albums", "artists", "playlists", "liked", "queue", "review", "add", "storage"] satisfies View["kind"][]);
 
 export function viewHash(view: View): string {
@@ -29,6 +30,11 @@ export function viewFromHash(hash: string): View | null {
 // Albums and artists remember the view they were opened from, so their back buttons can return there.
 function entryState(view: View): { from: string } | null {
   return (view.kind === "album" || view.kind === "artist") && view.from ? { from: viewHash(view.from) } : null;
+}
+
+// An empty library opens on Add music; otherwise the address the app was left at, or the start page.
+export function launchView(empty: boolean): View {
+  return empty ? { kind: "add" } : (currentView() ?? START_VIEW);
 }
 
 export function currentView(): View | null {
@@ -103,8 +109,8 @@ function onPop(): void {
     .reverse()
     .forEach((layer) => layer.close());
   const view = currentView();
-  if (!view) history.replaceState(history.state, "", viewHash(SONGS));
-  viewListeners.forEach((listener) => listener(view ?? SONGS));
+  if (!view) history.replaceState(history.state, "", viewHash(START_VIEW));
+  viewListeners.forEach((listener) => listener(view ?? START_VIEW));
   // Forward onto the entry of a sheet that has since closed steps straight back off it.
   queueSync();
 }

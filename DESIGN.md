@@ -28,7 +28,7 @@ colors:
   # Status
   danger: "#e07a6a"
 typography:
-  display: "'Syne', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+  display: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
   sans: "'Figtree', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
   mono: "'Geist Mono', ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, monospace"
 radius: 0
@@ -79,12 +79,12 @@ The lamp is amber, not rose. Rose (`#e09a8a`) sits too close to `danger`, so "pl
 
 ## 3. Typography
 
-Syne (400, 500) for display, Figtree (300, 400, 500) for text and Geist Mono (400, 500) for values, bundled from `@fontsource`. Syne has no 300 weight, so display text renders at 400.
+Plus Jakarta Sans (300, 400) for display, Figtree (300, 400, 500) for text and Geist Mono (400, 500) for values, bundled from `@fontsource`. Display text is light and set a touch tight, so headings read quiet at 1am. Syne was dropped because its g, y and p end in a flat cut that looks clipped.
 
 | Role | Face | Size / line | Weight | Use |
 |---|---|---|---|---|
-| `display` | Syne | clamp(32px, 6vw, 48px) / 1.2, -0.03em | 400 | Page titles |
-| `h2` | Syne | 22px / 1.3 | 400 | Section headings |
+| `display` | Plus Jakarta Sans | clamp(32px, 6vw, 48px) / 1.2, -0.01em | 300 | Page titles |
+| `h2` | Plus Jakarta Sans | 22px / 1.3, -0.01em | 400 | Section headings |
 | `title` | Sans | 16–17px / 1.35 | 400 | Song and tile titles |
 | `body` | Sans | 16px / 1.55 | 400 | Descriptions, help copy |
 | `small` | Sans | 14px / 1.5, tabular | 400 | Artist and album lines, tile notes |
