@@ -1,16 +1,17 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { freshEnvironment, makeTrack } from "./testing";
+import type { Track } from "./types";
 
 beforeEach(freshEnvironment);
 
 // Songs listed in withoutFile are in the library but their stored file is missing.
-async function setup(ids: string[], withoutFile: string[] = []) {
+async function setup(ids: string[], withoutFile: string[] = [], patches: Record<string, Partial<Track>> = {}) {
   const library = await import("./library");
   const player = await import("./player");
   await library.loadLibrary();
   for (const id of ids) {
-    await library.addTrack({ track: makeTrack(id), file: withoutFile.includes(id) ? undefined : new Blob(["abc"]) });
+    await library.addTrack({ track: makeTrack(id, patches[id]), file: withoutFile.includes(id) ? undefined : new Blob(["abc"]) });
   }
   player.initPlayer();
   const audio = document.querySelector("audio")!;
@@ -186,7 +187,34 @@ describe("sleep timer", () => {
     expect(player.getSleepTimer()).toBeNull();
   });
 
-  it("fades over the last ten seconds, then pauses and restores the volume", async () => {
+  it("stops at the end of the album, with the next album's first song ready", async () => {
+    const albums = { a: { album: "One" }, b: { album: "One" }, c: { album: "Two" } };
+    const { player, audio, loaded } = await setup(["a", "b", "c"], [], albums);
+    player.playTracks(["a", "b", "c"], 0);
+    await loaded("a");
+    player.setSleepTimer("album");
+    audio.dispatchEvent(new Event("ended"));
+    await loaded("b");
+    expect(player.getSleepTimer()).toEqual({ kind: "album" });
+    const plays = vi.mocked(audio.play).mock.calls.length;
+    audio.dispatchEvent(new Event("ended"));
+    await loaded("c");
+    expect(vi.mocked(audio.play).mock.calls.length).toBe(plays);
+    expect(player.getSleepTimer()).toBeNull();
+  });
+
+  it("only counts the next song as the same album when it is, so shuffle and album ends get no album stop", async () => {
+    const albums = { a: { album: "One" }, b: { album: "One" }, c: { album: "Two" } };
+    const { player, audio, loaded } = await setup(["a", "b", "c"], [], albums);
+    player.playTracks(["a", "b", "c"], 0);
+    await loaded("a");
+    expect(player.nextIsSameAlbum()).toBe(true);
+    audio.dispatchEvent(new Event("ended"));
+    await loaded("b");
+    expect(player.nextIsSameAlbum()).toBe(false);
+  });
+
+  it("fades over the last three minutes on a curve, then pauses and restores the volume", async () => {
     const { player, audio } = await setup(["a"]);
     player.playTracks(["a"], 0);
     // loaded() can pass on the silent unlock clip; playing is only set once the song itself plays.
@@ -195,17 +223,53 @@ describe("sleep timer", () => {
     try {
       player.setVolume(0.8);
       player.setSleepTimer(15);
-      vi.advanceTimersByTime(15 * 60_000 - 5000);
-      expect(audio.volume).toBeCloseTo(0.4);
+      vi.advanceTimersByTime(12 * 60_000);
+      expect(audio.volume).toBe(0.8);
+      vi.advanceTimersByTime(90_000);
+      expect(audio.volume).toBeCloseTo(0.2);
       expect(audio.pause).not.toHaveBeenCalled();
-      vi.advanceTimersByTime(5000);
+      vi.advanceTimersByTime(90_000);
       expect(audio.pause).toHaveBeenCalled();
-      expect(audio.volume).toBeLessThan(0.1);
+      expect(audio.volume).toBeLessThan(0.01);
       expect(player.getSleepTimer()).toBeNull();
       player.toggle();
       expect(audio.volume).toBe(0.8);
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  it("remembers the last choice", async () => {
+    const { player } = await setup(["a"]);
+    expect(player.lastSleepChoice()).toBeNull();
+    player.setSleepTimer(90);
+    player.setSleepTimer(null);
+    expect(player.lastSleepChoice()).toBe(90);
+    player.setSleepTimer("album");
+    expect(player.lastSleepChoice()).toBe("album");
+  });
+
+  it("fades through a Web Audio gain where the browser ignores the element's volume, as iOS does", async () => {
+    const volume = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "volume")!;
+    const gainNode = { gain: { setTargetAtTime: vi.fn() }, context: { currentTime: 0, state: "running" }, connect: vi.fn((n) => n) };
+    const resume = vi.fn(async () => {});
+    const context = vi.fn(function (this: object) {
+      Object.assign(this, { createGain: () => gainNode, createMediaElementSource: vi.fn(() => ({ connect: () => gainNode })), destination: {}, resume });
+    });
+    Object.defineProperty(HTMLMediaElement.prototype, "volume", { configurable: true, get: () => 1, set() {} });
+    vi.stubGlobal("AudioContext", context);
+    try {
+      const { player } = await setup(["a"]);
+      player.setSleepTimer("song");
+      expect(context).not.toHaveBeenCalled();
+      player.setSleepTimer(15);
+      player.setSleepTimer(30);
+      expect(context).toHaveBeenCalledTimes(1);
+      expect(resume).toHaveBeenCalled();
+      expect(gainNode.gain.setTargetAtTime).toHaveBeenCalledWith(1, 0, 0.1);
+    } finally {
+      Object.defineProperty(HTMLMediaElement.prototype, "volume", volume);
+      vi.unstubAllGlobals();
     }
   });
 });

@@ -7,7 +7,9 @@ import {
   cycleRepeat,
   getNowPlaying,
   hasNext,
+  lastSleepChoice,
   next,
+  nextIsSameAlbum,
   pickOutput,
   previous,
   retry,
@@ -27,6 +29,7 @@ import {
   useSleepTimer,
   useVolume,
   useWirelessOutput,
+  type SleepChoice,
 } from "../lib/player";
 import { isIOS } from "../lib/standalone";
 import { isShortcut } from "../lib/keys";
@@ -38,7 +41,7 @@ import { MenuSheet } from "./SongMenu";
 import { Button, CoverArt } from "./ui";
 
 const COLLAPSED_KEY = "tunenook.dockCollapsed";
-const SLEEP_MINUTES = [15, 30, 45, 60];
+const SLEEP_MINUTES = [15, 30, 45, 60, 90, 120];
 // iOS makes audio.volume read-only; the hardware buttons are the only control.
 const canSetVolume = !isIOS();
 
@@ -82,11 +85,18 @@ function OutputControl() {
   );
 }
 
+const sleepLabel = (minutes: number) => (minutes % 60 ? `${minutes} minutes` : minutes === 60 ? "1 hour" : `${minutes / 60} hours`);
+
 // A quiet line in the player that opens the choices in their own sheet, so they never crowd the controls.
 function SleepTimerControl() {
   const sleep = useSleepTimer();
   const [open, setOpen] = useState(false);
-  const choose = (choice: number | "song" | null) => {
+  // Read when the sheet opens, so it shows what was picked the night before.
+  const last = open ? lastSleepChoice() : null;
+  const album = open && (sleep?.kind === "album" || nextIsSameAlbum());
+  const note = (choice: SleepChoice, on: boolean) =>
+    on ? <span className="menu-note">On</span> : !sleep && last === choice && <span className="menu-note">Last time</span>;
+  const choose = (choice: SleepChoice | null) => {
     setSleepTimer(choice);
     setOpen(false);
   };
@@ -95,7 +105,9 @@ function SleepTimerControl() {
     <>
       <button className={`sheet-quiet${sleep ? " is-set" : ""}`} aria-haspopup="dialog" onClick={() => setOpen(true)}>
         <MoonIcon />
-        <span>{!sleep ? "Sleep timer" : sleep.kind === "song" ? "After this song" : <Countdown endsAt={sleep.endsAt} />}</span>
+        <span>
+          {!sleep ? "Sleep timer" : sleep.kind === "song" ? "After this song" : sleep.kind === "album" ? "After this album" : <Countdown endsAt={sleep.endsAt} />}
+        </span>
       </button>
       {open && (
         <MenuSheet label="Sleep timer" title="Sleep timer" subtitle="Stop playing after" onClose={() => setOpen(false)}>
@@ -103,17 +115,25 @@ function SleepTimerControl() {
             {SLEEP_MINUTES.map((minutes) => (
               <li key={minutes}>
                 <button className="menu-item" onClick={() => choose(minutes)}>
-                  {minutes === 60 ? "1 hour" : `${minutes} minutes`}
-                  {sleep?.kind === "at" && sleep.minutes === minutes && <span className="menu-note">On</span>}
+                  {sleepLabel(minutes)}
+                  {note(minutes, sleep?.kind === "at" && sleep.minutes === minutes)}
                 </button>
               </li>
             ))}
             <li>
               <button className="menu-item" onClick={() => choose("song")}>
                 End of this song
-                {sleep?.kind === "song" && <span className="menu-note">On</span>}
+                {note("song", sleep?.kind === "song")}
               </button>
             </li>
+            {album && (
+              <li>
+                <button className="menu-item" onClick={() => choose("album")}>
+                  End of this album
+                  {note("album", sleep?.kind === "album")}
+                </button>
+              </li>
+            )}
             {sleep && (
               <>
                 <li className="menu-gap" aria-hidden="true" />

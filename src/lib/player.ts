@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { linkedFile, NeedsAccessError } from "./folders";
-import { artDataUrl, getTrack, onTracksRemoved, recordPlay, storedFile, updateTrack } from "./library";
+import { artDataUrl, getTrack, onTracksRemoved, recordPlay, storedFile, trackAlbumKey, updateTrack } from "./library";
 import { publishPlaybackState, publishPosition } from "./mediaSession";
 import { throttledWriter } from "./persist";
 import { createListenCounter } from "./playCount";
@@ -30,10 +30,13 @@ const MAX_SKIPS = 3;
 const SAVE_KEY = "tunenook.queue";
 const SAVE_INTERVAL_MS = 5000;
 const VOLUME_KEY = "tunenook.volume";
-const FADE_MS = 10_000;
+const FADE_MS = 3 * 60_000;
+const SLEEP_CHOICE_KEY = "tunenook.sleepChoice";
 
-// "song" stops at the end of whatever song is playing then, so it follows a skip.
-export type SleepTimer = { kind: "at"; endsAt: number; minutes: number } | { kind: "song" };
+// "song" stops at the end of whatever song is playing then, so it follows a skip; "album" stops when the next
+// song would come from another album.
+export type SleepTimer = { kind: "at"; endsAt: number; minutes: number } | { kind: "song" } | { kind: "album" };
+export type SleepChoice = number | "song" | "album";
 
 export type Failure = { kind: "error" } | { kind: "access"; folderId: string };
 
@@ -77,6 +80,9 @@ let volume = readVolume();
 let audible = volume || 1;
 // Below 1 only during a sleep timer's fade.
 let fade = 1;
+// iOS ignores audio.volume, so a fade there goes through a Web Audio gain instead. The element can't be
+// unrouted once connected, so this is only set up when a timed sleep timer is first chosen.
+let gain: GainNode | null = null;
 let saveVolume: () => void = () => {};
 
 function readVolume(): number {
@@ -89,7 +95,32 @@ function readVolume(): number {
 }
 
 function applyVolume(): void {
-  if (audio) audio.volume = volume * fade;
+  if (!audio) return;
+  audio.volume = volume * fade;
+  // A short time constant smooths the steps between sleep checks.
+  if (gain) gain.gain.setTargetAtTime(volume * fade, gain.context.currentTime, 0.1);
+}
+
+function volumeIsFixed(): boolean {
+  const probe = document.createElement("audio");
+  probe.volume = 0.5;
+  return probe.volume !== 0.5;
+}
+
+// Runs inside the tap that sets the timer, which iOS needs before an AudioContext will play. Skipped while
+// AirPlay is on, as audio routed through Web Audio stays on this device.
+function routeThroughGain(): void {
+  if (gain || !audio || wireless || typeof AudioContext === "undefined" || !volumeIsFixed()) return;
+  const context = new AudioContext();
+  gain = context.createGain();
+  context.createMediaElementSource(audio).connect(gain).connect(context.destination);
+  // Some iOS versions start a context suspended even inside a tap, which would silence the song now playing.
+  void context.resume().catch(() => {});
+}
+
+function resumeGain(): void {
+  const context = gain?.context as AudioContext | undefined;
+  if (context && context.state !== "running") void context.resume().catch(() => {});
 }
 
 function setNow(patch: Partial<NowPlaying>): void {
@@ -176,6 +207,8 @@ function prefetch(): void {
 
 function play(): void {
   if (!audio) return;
+  // A phone call or another app's audio can suspend the context, which would leave playback silent.
+  resumeGain();
   audio
     .play()
     .then(() => {
@@ -277,7 +310,7 @@ function advance(auto: boolean): void {
 
 function onEnded(): void {
   skips = 0;
-  if (sleep?.kind === "song") {
+  if (sleep?.kind === "song" || (sleep?.kind === "album" && !nextIsSameAlbum())) {
     setSleepTimer(null);
     // The next song waits, paused, so the morning's Play doesn't repeat the one already heard.
     const at = nextAt(queue, true);
@@ -289,6 +322,15 @@ function onEnded(): void {
   advance(true);
 }
 
+// Also decides whether "End of this album" is offered: shuffled or mixed, it would stop after this song.
+export function nextIsSameAlbum(): boolean {
+  const at = nextAt(queue, true);
+  if (at === null || at === queue.at) return false;
+  const here = getTrack(currentId(queue) ?? "");
+  const next = getTrack(idAt(queue, at));
+  return !!here && !!next && trackAlbumKey(here) === trackAlbumKey(next);
+}
+
 function clearSleep(): void {
   clearTimeout(sleepCheck);
   sleepCheck = undefined;
@@ -298,7 +340,7 @@ function clearSleep(): void {
 }
 
 // Runs on every timeupdate as well as on its own timeout: iOS throttles timers with the screen locked but keeps
-// sending timeupdate while audio plays. iOS ignores volume changes, so there it pauses without the fade.
+// sending timeupdate while audio plays. Squaring the fade makes it sound more even, as loudness follows the level's log.
 // The volume comes back on the next play, not here, so no buffered audio sounds at full level as it stops.
 function checkSleep(): void {
   if (sleep?.kind !== "at") return;
@@ -311,7 +353,7 @@ function checkSleep(): void {
     if (loadedId !== currentId(queue)) load(false);
     return;
   }
-  const nextFade = Math.min(1, left / FADE_MS);
+  const nextFade = Math.min(1, left / FADE_MS) ** 2;
   if (nextFade !== fade) {
     fade = nextFade;
     applyVolume();
@@ -535,11 +577,17 @@ export function setVolume(level: number): void {
   saveVolume();
 }
 
-// Minutes from now, "song" for the end of the playing song, or null to cancel.
-export function setSleepTimer(choice: number | "song" | null): void {
+// Minutes from now, "song" or "album" to stop at the end of the playing one, or null to cancel.
+export function setSleepTimer(choice: SleepChoice | null): void {
   clearSleep();
   if (choice !== null) {
-    sleep = choice === "song" ? { kind: "song" } : { kind: "at", endsAt: Date.now() + choice * 60_000, minutes: choice };
+    sleep = typeof choice === "number" ? { kind: "at", endsAt: Date.now() + choice * 60_000, minutes: choice } : { kind: choice };
+    if (typeof choice === "number") routeThroughGain();
+    try {
+      localStorage.setItem(SLEEP_CHOICE_KEY, String(choice));
+    } catch {
+      // Remembering the choice is a convenience; the timer works without it.
+    }
     emit();
   }
   applyVolume();
@@ -604,6 +652,17 @@ export function useVolume(): number {
 
 export function getSleepTimer(): SleepTimer | null {
   return sleep;
+}
+
+export function lastSleepChoice(): SleepChoice | null {
+  try {
+    const saved = localStorage.getItem(SLEEP_CHOICE_KEY);
+    if (saved === "song" || saved === "album") return saved;
+    const minutes = Number(saved);
+    return saved && Number.isInteger(minutes) && minutes > 0 ? minutes : null;
+  } catch {
+    return null;
+  }
 }
 
 export function useSleepTimer(): SleepTimer | null {
