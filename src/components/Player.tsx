@@ -3,10 +3,12 @@ import { requestAccess } from "../lib/folders";
 import { formatClock } from "../lib/format";
 import { artistPageFor, hasAlbum, toggleLike, trackAlbumKey, useTrackMap } from "../lib/library";
 import {
+  canPickOutput,
   cycleRepeat,
   getNowPlaying,
   hasNext,
   next,
+  pickOutput,
   previous,
   retry,
   seek,
@@ -24,12 +26,13 @@ import {
   useQueue,
   useSleepTimer,
   useVolume,
+  useWirelessOutput,
 } from "../lib/player";
 import { isIOS } from "../lib/standalone";
 import { isShortcut } from "../lib/keys";
 import { idAt } from "../lib/queue";
 import { Dialog } from "./Dialog";
-import { ChevronDownIcon, HeartIcon, MoonIcon, MutedIcon, NextIcon, PauseIcon, PlayIcon, PrevIcon, RefreshIcon, RepeatIcon, RepeatOneIcon, ShuffleIcon, VolumeIcon } from "./icons";
+import { ChevronDownIcon, HeartIcon, MoonIcon, MutedIcon, NextIcon, OutputIcon, PauseIcon, PlayIcon, PrevIcon, RefreshIcon, RepeatIcon, RepeatOneIcon, ShuffleIcon, VolumeIcon } from "./icons";
 import type { View } from "./Sidebar";
 import { MenuSheet } from "./SongMenu";
 import { Button, CoverArt } from "./ui";
@@ -65,6 +68,20 @@ function Countdown({ endsAt }: { endsAt: number }) {
   return <>Stops in {formatClock(Math.max(0, Math.ceil(endsAt / 1000) - now))}</>;
 }
 
+function OutputControl() {
+  const elsewhere = useWirelessOutput();
+  if (!canPickOutput()) return null;
+  return (
+    <button
+      className={`sheet-quiet${elsewhere ? " is-set" : ""}`}
+      aria-label={elsewhere ? "Playing on another device. Choose where it plays" : "Choose where it plays"}
+      onClick={pickOutput}
+    >
+      <OutputIcon />
+    </button>
+  );
+}
+
 // A quiet line in the player that opens the choices in their own sheet, so they never crowd the controls.
 function SleepTimerControl() {
   const sleep = useSleepTimer();
@@ -78,7 +95,7 @@ function SleepTimerControl() {
     <>
       <button className={`sheet-quiet${sleep ? " is-set" : ""}`} aria-haspopup="dialog" onClick={() => setOpen(true)}>
         <MoonIcon />
-        <span>{!sleep ? "Sleep timer" : sleep.kind === "song" ? "Stops after this song" : <Countdown endsAt={sleep.endsAt} />}</span>
+        <span>{!sleep ? "Sleep timer" : sleep.kind === "song" ? "After this song" : <Countdown endsAt={sleep.endsAt} />}</span>
       </button>
       {open && (
         <MenuSheet label="Sleep timer" title="Sleep timer" subtitle="Stop playing after" onClose={() => setOpen(false)}>
@@ -366,7 +383,10 @@ export function Player({ onNavigate, onShowCurrent }: { onNavigate: (view: View)
             {repeatButton}
           </div>
           <div className="sheet-foot">
-            <SleepTimerControl />
+            <div className="sheet-tools">
+              <SleepTimerControl />
+              <OutputControl />
+            </div>
             <button
               className="up-next"
               onClick={() => {

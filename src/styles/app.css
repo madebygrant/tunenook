@@ -1431,6 +1431,12 @@ mark {
   width: 18px;
   height: 18px;
 }
+.sheet-tools {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
 .sheet-foot .up-next {
   min-width: 0;
   text-align: right;

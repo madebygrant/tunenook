@@ -66,6 +66,12 @@ const { emit, subscribe } = createListeners();
 let save: () => void = () => {};
 let sleep: SleepTimer | null = null;
 let sleepCheck: ReturnType<typeof setTimeout> | undefined;
+// Safari's picker for AirPlay speakers and Bluetooth headphones; no other browser lets a page choose its output.
+interface RoutableAudio extends HTMLAudioElement {
+  webkitShowPlaybackTargetPicker?: () => void;
+  webkitCurrentPlaybackTargetIsWireless?: boolean;
+}
+let wireless = false;
 let volume = readVolume();
 // What unmuting returns to once the slider has been dragged to 0.
 let audible = volume || 1;
@@ -337,9 +343,15 @@ export function initPlayer(): void {
   audio = document.createElement("audio");
   audio.preload = "auto";
   audio.setAttribute("playsinline", "");
+  audio.setAttribute("x-webkit-airplay", "allow");
   document.body.appendChild(audio);
   const a = audio;
   applyVolume();
+
+  a.addEventListener("webkitcurrentplaybacktargetiswirelesschanged", () => {
+    wireless = (a as RoutableAudio).webkitCurrentPlaybackTargetIsWireless === true;
+    emit();
+  });
 
   a.addEventListener("loadedmetadata", () => {
     if (a.src === silentUrl) return;
@@ -596,6 +608,20 @@ export function getSleepTimer(): SleepTimer | null {
 
 export function useSleepTimer(): SleepTimer | null {
   return useSyncExternalStore(subscribe, () => sleep);
+}
+
+export function canPickOutput(): boolean {
+  return typeof (audio as RoutableAudio | null)?.webkitShowPlaybackTargetPicker === "function";
+}
+
+// Opens the system list; it has to run inside a tap.
+export function pickOutput(): void {
+  (audio as RoutableAudio | null)?.webkitShowPlaybackTargetPicker?.();
+}
+
+// True while an AirPlay speaker plays the sound instead of this device.
+export function useWirelessOutput(): boolean {
+  return useSyncExternalStore(subscribe, () => wireless);
 }
 
 export function useDuration(): number {

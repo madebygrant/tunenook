@@ -134,6 +134,43 @@ describe("player", () => {
   });
 });
 
+describe("output picker", () => {
+  it("is offered only where the browser has one, and opens it", async () => {
+    const { player } = await setup([]);
+    expect(player.canPickOutput()).toBe(false);
+    const show = vi.fn();
+    Object.assign(document.querySelector("audio")!, { webkitShowPlaybackTargetPicker: show });
+    expect(player.canPickOutput()).toBe(true);
+    player.pickOutput();
+    expect(show).toHaveBeenCalledOnce();
+  });
+
+  it("tracks when an AirPlay speaker takes over the sound", async () => {
+    const { player, audio } = await setup([]);
+    const seen: boolean[] = [];
+    const { createRoot } = await import("react-dom/client");
+    const { act, createElement } = await import("react");
+    const env = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+    env.IS_REACT_ACT_ENVIRONMENT = true;
+    try {
+      function Probe() {
+        seen.push(player.useWirelessOutput());
+        return null;
+      }
+      const root = createRoot(document.createElement("div"));
+      act(() => root.render(createElement(Probe)));
+      Object.assign(audio, { webkitCurrentPlaybackTargetIsWireless: true });
+      act(() => void audio.dispatchEvent(new Event("webkitcurrentplaybacktargetiswirelesschanged")));
+      Object.assign(audio, { webkitCurrentPlaybackTargetIsWireless: false });
+      act(() => void audio.dispatchEvent(new Event("webkitcurrentplaybacktargetiswirelesschanged")));
+      act(() => root.unmount());
+    } finally {
+      delete env.IS_REACT_ACT_ENVIRONMENT;
+    }
+    expect(seen).toEqual([false, true, false]);
+  });
+});
+
 describe("sleep timer", () => {
   it("stops at the end of the song playing then, even after a skip, with the next one ready", async () => {
     const { player, audio, loaded } = await setup(["a", "b", "c"]);
