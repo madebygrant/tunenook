@@ -130,6 +130,16 @@ describe("layers", () => {
   });
 });
 
+describe("artist origin", () => {
+  it("keeps the view an artist was opened from in its entry", async () => {
+    const { currentView } = await import("./history");
+    history.replaceState(null, "", "#/review");
+    pushView({ kind: "artist", key: "queen", from: { kind: "review" } });
+    await settle();
+    expect(currentView()).toEqual({ kind: "artist", key: "queen", from: { kind: "review" } });
+  });
+});
+
 describe("album origin", () => {
   it("keeps the view an album was opened from in its entry, and drops it for other views", async () => {
     const { currentView } = await import("./history");

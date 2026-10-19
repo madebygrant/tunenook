@@ -1,6 +1,9 @@
 const EXTENSION = /\.[a-z0-9]{1,5}$/i;
 const LEADING_NUMBER = /^(\d{1,3})[\s._-]+/;
 
+// What songs with no artist tag are filed under.
+export const UNKNOWN_ARTIST = "Unknown artist";
+
 export interface NameGuess {
   title: string;
   artist: string | null;

@@ -22,7 +22,8 @@ let dirty = false;
 let playlists: Playlist[] = [];
 let folders: LinkedFolder[] = [];
 let plays: Play[] = [];
-let removedSongs = new Map<string, RemovedSong>();
+// Replaced on change, never edited in place, so it can be a React snapshot.
+let removedSongs: ReadonlyMap<string, RemovedSong> = new Map();
 let removedPlays = 0;
 let loaded = false;
 let loadError: string | null = null;
@@ -211,8 +212,24 @@ export function getPlays(): readonly Play[] {
   return plays;
 }
 
+export function usePlays(): readonly Play[] {
+  return useSyncExternalStore(subscribe, () => plays);
+}
+
 export function getRemovedSongs(): ReadonlyMap<string, RemovedSong> {
   return removedSongs;
+}
+
+export function useRemovedSongs(): ReadonlyMap<string, RemovedSong> {
+  return useSyncExternalStore(subscribe, () => removedSongs);
+}
+
+function withRemoved(add: RemovedSong[], drop: string[] = []): void {
+  if (add.length === 0 && drop.length === 0) return;
+  const next = new Map(removedSongs);
+  drop.forEach((id) => next.delete(id));
+  add.forEach((song) => next.set(song.id, song));
+  removedSongs = next;
 }
 
 function logged(added: Play[]): void {
@@ -251,7 +268,7 @@ async function dropPlays(gone: (p: Play) => boolean): Promise<number> {
     ...forgotten.map((id): Write => ({ store: "removed", op: "delete", key: id })),
   ]);
   plays = kept;
-  forgotten.forEach((id) => removedSongs.delete(id));
+  withRemoved([], forgotten);
   countRemovedPlays();
   emit();
   return dropped.length;
@@ -632,7 +649,7 @@ export function addRemovedHistory(entries: RemovedHistory[], failure: string): P
         ...songs.map((s): Write => ({ store: "removed", op: "put", value: s })),
         ...added.map((p): Write => ({ store: "plays", op: "put", value: p })),
       ]);
-      songs.forEach((s) => removedSongs.set(s.id, s));
+      withRemoved(songs);
       plays = [...plays, ...added].sort((a, b) => a.at - b.at);
       countRemovedPlays();
       emit();
@@ -688,7 +705,7 @@ export function removeTracks(ids: ReadonlySet<string>): Promise<void> {
     unusedArt.forEach(forgetArt);
     gone.forEach((t) => dropTrack(t.id));
     playlists = changed;
-    remembered.forEach((s) => removedSongs.set(s.id, s));
+    withRemoved(remembered);
     countRemovedPlays();
     publish();
     removedListeners.forEach((listener) => listener(ids));

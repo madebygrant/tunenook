@@ -2163,6 +2163,15 @@ b.mono {
 .space-warning p + p {
   margin-top: 12px;
 }
+.periods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 12px 0 0 -10px;
+}
+.review-summary {
+  margin-top: 16px;
+}
 .storage-history p {
   font-size: 14px;
 }

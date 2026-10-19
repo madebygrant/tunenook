@@ -2,7 +2,7 @@ import { hasPlaylist, isBackupFile, parseBackup, restoreBackup, type Backup } fr
 import { contentKey } from "./contentKey";
 import { addTrack, albumCover, createPlaylist, getTracks, hasArt, patchTrack, trackAlbumKey } from "./library";
 import { isPlaylistFile, m3uEntries, matchEntries, playlistName, trackPath } from "./m3u";
-import { guessFromFileName, isAudioFile, sourceKey } from "./tags";
+import { guessFromFileName, isAudioFile, sourceKey, UNKNOWN_ARTIST } from "./tags";
 import type { Track, TrackSource } from "./types";
 
 const ART_SIZE = 512;
@@ -105,7 +105,7 @@ export async function readTrack(file: File, source: TrackSource, pendingArt: Set
   const meta = await parseBlob(file, { duration: false }).catch(() => null);
   const guess = guessFromFileName(file.name);
   const c = meta?.common;
-  const artist = c?.artist?.trim() || c?.artists?.[0]?.trim() || guess.artist || "Unknown artist";
+  const artist = c?.artist?.trim() || c?.artists?.[0]?.trim() || guess.artist || UNKNOWN_ARTIST;
   const album = c?.album?.trim() ?? "";
   // Compilations without an album artist would otherwise split into one album per track artist.
   const albumArtist = c?.albumartist?.trim() || (c?.compilation ? "Various artists" : artist);

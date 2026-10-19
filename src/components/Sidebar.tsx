@@ -1,17 +1,18 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { useCloseOnBack } from "../lib/history";
-import { AddMusicIcon, AlbumIcon, ArtistIcon, BrandMark, CloseIcon, PlaylistIcon, QueueIcon, SongsIcon } from "./icons";
+import { AddMusicIcon, AlbumIcon, ArtistIcon, BrandMark, CloseIcon, PlaylistIcon, QueueIcon, ReviewIcon, SongsIcon } from "./icons";
 
 export type View =
   | { kind: "songs" }
   | { kind: "albums" }
   | { kind: "album"; key: string; from?: View }
   | { kind: "artists" }
-  | { kind: "artist"; key: string }
+  | { kind: "artist"; key: string; from?: View }
   | { kind: "playlists" }
   | { kind: "playlist"; id: string }
   | { kind: "liked" }
   | { kind: "queue" }
+  | { kind: "review" }
   | { kind: "add" };
 
 interface Props {
@@ -32,6 +33,7 @@ const ITEMS: { kind: View["kind"]; label: string; icon: ReactNode; also?: View["
   { kind: "artists", label: "Artists", icon: <ArtistIcon />, also: ["artist"] },
   { kind: "playlists", label: "Playlists", icon: <PlaylistIcon />, also: ["playlist", "liked"] },
   { kind: "queue", label: "Queue", icon: <QueueIcon /> },
+  { kind: "review", label: "Review", icon: <ReviewIcon /> },
   { kind: "add", label: "Add music", icon: <AddMusicIcon /> },
 ];
 

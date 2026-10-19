@@ -100,6 +100,12 @@ export const QueueIcon = (props: SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+export const ReviewIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 16 16" {...base} {...props}>
+    <path d="M2 14h12M4 14V9M8 14V3M12 14V7" />
+  </svg>
+);
+
 export const AddMusicIcon = (props: SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 16 16" {...base} {...props}>
     <path d="M8 2v8M4 6l4-4 4 4M2 10v4h12v-4" />

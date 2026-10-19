@@ -23,9 +23,24 @@ interface Props {
   onReorder?: (from: number, to: number) => void;
   // A row that must stay mounted even when the list is windowed, so it can be scrolled to.
   pinnedIndex?: number | null;
+  // Shown at the end of each row in place of the song's length.
+  detail?: (index: number) => ReactNode;
 }
 
-export function SongList({ tracks, currentIndex, playing, numbered, showAlbum = true, onPlay, onMore, label, selection, onReorder, pinnedIndex }: Props) {
+export function SongList({
+  tracks,
+  currentIndex,
+  playing,
+  numbered,
+  showAlbum = true,
+  onPlay,
+  onMore,
+  label,
+  selection,
+  onReorder,
+  pinnedIndex,
+  detail,
+}: Props) {
   const selecting = selection?.active ? selection : null;
   const list = useRef<HTMLUListElement>(null);
   // Keyed by song rather than position, so a moved row keeps its element and its handle keeps focus.
@@ -73,6 +88,7 @@ export function SongList({ tracks, currentIndex, playing, numbered, showAlbum = 
         const position = windowed ? { "aria-posinset": i + 1, "aria-setsize": tracks.length, "data-index": i } : { "data-index": i };
         const current = i === currentIndex;
         const sub = showAlbum && t.album ? `${t.artist} · ${t.album}` : t.artist;
+        const end = detail ? detail(i) : t.duration ? formatClock(t.duration) : "";
         if (selecting) {
           const selected = selecting.isSelected(i);
           return (
@@ -90,7 +106,7 @@ export function SongList({ tracks, currentIndex, playing, numbered, showAlbum = 
                   <span className="ttl">{t.title}</span>
                   <span className="sub">{sub}</span>
                 </span>
-                <span className="song-dur">{t.duration ? formatClock(t.duration) : ""}</span>
+                <span className="song-dur">{end}</span>
               </button>
             </li>
           );
@@ -140,7 +156,7 @@ export function SongList({ tracks, currentIndex, playing, numbered, showAlbum = 
                 <span className="ttl">{t.title}</span>
                 <span className="sub">{sub}</span>
               </span>
-              <span className="song-dur">{t.duration ? formatClock(t.duration) : ""}</span>
+              <span className="song-dur">{end}</span>
             </button>
             <button className="xh-icon-btn song-more" aria-label={`More for ${t.title}`} onClick={() => onMore(i)}>
               <MoreIcon />

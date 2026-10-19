@@ -8,6 +8,7 @@ import { OpenedFiles } from "./components/OpenedFiles";
 import { Player } from "./components/Player";
 import { LikedPage, PlaylistPage, Playlists } from "./components/Playlists";
 import { Queue } from "./components/Queue";
+import { Review } from "./components/Review";
 import { Shortcuts } from "./components/Shortcuts";
 import { Sidebar, type View } from "./components/Sidebar";
 import { SongMenu, type MenuTarget } from "./components/SongMenu";
@@ -141,7 +142,7 @@ export default function App() {
         ? (artists.find((a) => a.key === v.key)?.name ?? "Artist")
         : v.kind === "playlist"
           ? (playlists.find((p) => p.id === v.id)?.name ?? "Playlist")
-          : { songs: "Songs", albums: "Albums", artists: "Artists", playlists: "Playlists", liked: "Liked songs", queue: "Queue", add: "Add music" }[v.kind];
+          : { songs: "Songs", albums: "Albums", artists: "Artists", playlists: "Playlists", liked: "Liked songs", queue: "Queue", review: "Review", add: "Add music" }[v.kind];
   const pageTitle = titleFor(view);
   const nowPlayingTitle = now.playing ? nowTrack?.title : undefined;
 
@@ -162,9 +163,10 @@ export default function App() {
 
   const navigate = useCallback((target: View) => {
     navigated.current = true;
-    // Only the album's own key is kept from an album origin, so origins don't chain.
-    const origin: View = view.kind === "album" ? { kind: "album", key: view.key } : view;
-    const next: View = target.kind === "album" && !target.from ? { ...target, from: origin } : target;
+    // An album or artist origin keeps only its key, so origins don't chain.
+    const origin: View =
+      view.kind === "album" ? { kind: "album", key: view.key } : view.kind === "artist" ? { kind: "artist", key: view.key } : view;
+    const next: View = (target.kind === "album" || target.kind === "artist") && !target.from ? { ...target, from: origin } : target;
     pushView(next);
     setView(next);
     setNavOpen(false);
@@ -200,7 +202,7 @@ export default function App() {
       follow({ ...view, key: trackAlbumKey(after) });
     } else if (view.kind === "artist" && !hasArtist(view.key)) {
       const key = [after.albumArtist, after.artist].map(artistKey).find(hasArtist);
-      if (key) follow({ kind: "artist", key });
+      if (key) follow({ kind: "artist", key, from: view.from });
     }
   }, [view, follow]);
 
@@ -311,7 +313,9 @@ export default function App() {
           <ArtistPage
             key={view.key}
             artistKey={view.key}
-            onBack={() => navigate({ kind: "artists" })}
+            backLabel={view.from ? titleFor(view.from) : "Artists"}
+            // The origin's entry sits right behind this one, so Back keeps history linear.
+            onBack={() => (view.from ? history.back() : navigate({ kind: "artists" }))}
             onOpenAlbum={(key) => navigate({ kind: "album", key })}
             onMore={(t) => openMenu(t, { kind: "library" })}
             onToast={showToast}
@@ -330,6 +334,12 @@ export default function App() {
           />
         ) : view.kind === "queue" ? (
           <Queue onMore={(t, pos) => openMenu(t, { kind: "queue", pos })} onToast={showToast} />
+        ) : view.kind === "review" ? (
+          <Review
+            onMore={(t) => openMenu(t, { kind: "library" })}
+            onOpenArtist={(key) => navigate({ kind: "artist", key })}
+            onOpenAlbum={(key) => navigate({ kind: "album", key })}
+          />
         ) : (
           <AddMusic />
         )}

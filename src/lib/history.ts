@@ -2,7 +2,7 @@ import { useEffect, useRef, type RefObject } from "react";
 import type { View } from "../components/Sidebar";
 
 const SONGS: View = { kind: "songs" };
-const PLAIN_KINDS = new Set<string>(["songs", "albums", "artists", "playlists", "liked", "queue", "add"] satisfies View["kind"][]);
+const PLAIN_KINDS = new Set<string>(["songs", "albums", "artists", "playlists", "liked", "queue", "review", "add"] satisfies View["kind"][]);
 
 export function viewHash(view: View): string {
   if (view.kind === "album" || view.kind === "artist") return `#/${view.kind}/${encodeURIComponent(view.key)}`;
@@ -26,16 +26,16 @@ export function viewFromHash(hash: string): View | null {
   return null;
 }
 
-// An album remembers the view it was opened from, so its back button can return there.
+// Albums and artists remember the view they were opened from, so their back buttons can return there.
 function entryState(view: View): { from: string } | null {
-  return view.kind === "album" && view.from ? { from: viewHash(view.from) } : null;
+  return (view.kind === "album" || view.kind === "artist") && view.from ? { from: viewHash(view.from) } : null;
 }
 
 export function currentView(): View | null {
   const view = viewFromHash(location.hash);
   const from = (history.state as { from?: unknown } | null)?.from;
   const origin = typeof from === "string" ? viewFromHash(from) : null;
-  return view?.kind === "album" && origin ? { ...view, from: origin } : view;
+  return (view?.kind === "album" || view?.kind === "artist") && origin ? { ...view, from: origin } : view;
 }
 
 // Each open sheet owns a same-URL history entry, so Back closes it.

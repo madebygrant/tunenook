@@ -4,7 +4,7 @@ import { totalSeconds, useArtists } from "../lib/library";
 import { playTracks } from "../lib/player";
 import { searchWords, useListPlayback } from "../lib/useListPlayback";
 import { useSelection } from "../lib/useSelection";
-import type { Album, Track } from "../lib/types";
+import type { Album, Artist, Track } from "../lib/types";
 import { ArrowLeftIcon, PlayIcon, ShuffleIcon } from "./icons";
 import { AlbumTile } from "./Albums";
 import { SearchField } from "./SearchField";
@@ -48,13 +48,7 @@ export function Artists({ onOpen, onAdd }: { onOpen: (key: string) => void; onAd
           ) : (
             <ul className="xh-shows tiles">
               {shown.map((a) => (
-                <li key={a.key} className="xh-show">
-                  <button className="show-open" onClick={() => onOpen(a.key)}>
-                    <CoverArt artId={a.artId} title={a.name} size="fluid" />
-                    <div className="name">{a.name}</div>
-                    <div className="note">{counts(a.albums.length, a.tracks.length)}</div>
-                  </button>
-                </li>
+                <ArtistTile key={a.key} artist={a} note={counts(a.albums.length, a.tracks.length)} onOpen={onOpen} />
               ))}
             </ul>
           )}
@@ -64,14 +58,28 @@ export function Artists({ onOpen, onAdd }: { onOpen: (key: string) => void; onAd
   );
 }
 
+export function ArtistTile({ artist, note, onOpen }: { artist: Artist; note: string; onOpen: (key: string) => void }) {
+  return (
+    <li className="xh-show">
+      <button className="show-open" onClick={() => onOpen(artist.key)}>
+        <CoverArt artId={artist.artId} title={artist.name} size="fluid" />
+        <div className="name">{artist.name}</div>
+        <div className="note">{note}</div>
+      </button>
+    </li>
+  );
+}
+
 export function ArtistPage({
   artistKey,
+  backLabel,
   onBack,
   onOpenAlbum,
   onMore,
   onToast,
 }: {
   artistKey: string;
+  backLabel: string;
   onBack: () => void;
   onOpenAlbum: (key: string) => void;
   onMore: (track: Track) => void;
@@ -86,7 +94,7 @@ export function ArtistPage({
     return (
       <section>
         <Button variant="ghost" className="back" icon={<ArrowLeftIcon />} onClick={onBack}>
-          Artists
+          {backLabel}
         </Button>
         <p className="lead muted">This artist is no longer in your library.</p>
       </section>
@@ -97,7 +105,7 @@ export function ArtistPage({
   return (
     <section aria-labelledby="artist-title">
       <Button variant="ghost" className="back" icon={<ArrowLeftIcon />} onClick={onBack}>
-        Artists
+        {backLabel}
       </Button>
       <div className="show-head">
         <CoverArt artId={artist.artId} title={artist.name} size={120} />
