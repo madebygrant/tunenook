@@ -1,7 +1,10 @@
 import { useSyncExternalStore } from "react";
 import { startContentBackfill } from "./contentBackfill";
+import { contentKey } from "./contentKey";
 import { importItems, isExtraFile, type ImportSummary, type Progress } from "./importer";
 import { deleteFolder, getFolders, getTracks, patchTrack, removeTracks, saveFolder } from "./library";
+import type { Write } from "./db";
+import { slimAudio } from "./slim";
 import { createListeners } from "./store";
 import { isAudioFile } from "./tags";
 import type { LinkedFolder, Track } from "./types";
@@ -159,8 +162,12 @@ export async function copyIntoLibrary(
     onProgress({ done: i, total: todo.length, current: track.fileName });
     try {
       const file = await linkedFile(track);
+      // Keyed from the original first, so the file on disk is still known as this song's after the cover goes.
+      const key = track.contentKey ?? (await contentKey(file));
+      const stored = (track.artId && (await slimAudio(file))) || file;
+      const extra: Write[] = [{ store: "files", op: "put", key: track.id, value: stored }];
       // Skipped when the song was removed while its file was read.
-      if (await patchTrack(track.id, { source: { kind: "copied" } }, [{ store: "files", op: "put", key: track.id, value: file }])) {
+      if (await patchTrack(track.id, { source: { kind: "copied" }, size: stored.size, contentKey: key }, extra)) {
         result.copied++;
       }
     } catch (e) {

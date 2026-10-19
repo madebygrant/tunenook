@@ -10,6 +10,7 @@ import '@fontsource/geist-mono/latin-500.css'
 import './styles/app.css'
 import App from './App.tsx'
 import { startContentBackfill } from './lib/contentBackfill'
+import { slimStoredSongs } from './lib/slim'
 import { checkAllAccess } from './lib/folders'
 import { listenForLaunch } from './lib/launch'
 import { loadLibrary } from './lib/library'
@@ -29,7 +30,7 @@ const seeded = import.meta.env.DEV
 void seeded
   .then(loadLibrary)
   .then(() => Promise.all([restoreQueue(), checkAllAccess()]))
-  .then(() => void startContentBackfill())
+  .then(() => void startContentBackfill().then(slimStoredSongs))
   .catch((e: unknown) => console.error('Library failed to load', e))
   .finally(() =>
     createRoot(document.getElementById('root')!).render(

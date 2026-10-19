@@ -88,9 +88,14 @@ describe("backup and restore", () => {
   it("doesn't take a same-named file from another album or one of another size", () => {
     const after = [
       makeTrack("elsewhere", { path: "Backup/Other album/01 One.mp3" }),
-      makeTrack("resized", { path: "Backup/Album/02 Two.mp3", size: 999 }),
+      makeTrack("resized", { path: "Backup/Album/02 Two.mp3", size: 999, sourceKey: "02 Two.mp3\n999" }),
     ];
     expect(restorePlan(backup, after, new Set(["elsewhere", "resized"])).stats.size).toBe(0);
+  });
+
+  it("matches a song whose stored copy dropped its cover by the size the file had", () => {
+    const after = [makeTrack("slim", { path: "Backup/Album/02 Two.mp3", size: 2, sourceKey: "02 Two.mp3\n3" })];
+    expect([...restorePlan(backup, after, new Set(["slim"])).stats.keys()]).toEqual(["slim"]);
   });
 
   it("keeps a linked song's own path, so it matches the original file and not a cleaned-up name", () => {

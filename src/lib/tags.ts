@@ -28,6 +28,11 @@ export function sourceKey(file: { name: string; size: number }): string {
   return `${file.name}\n${file.size}`;
 }
 
+// The size the file had when added, before the stored copy dropped its embedded cover.
+export function sourceSize(key: string): number {
+  return Number(key.slice(key.lastIndexOf("\n") + 1));
+}
+
 export function albumKey(albumArtist: string, album: string): string {
   return `${albumArtist.toLowerCase()}\n${album.toLowerCase()}`;
 }

@@ -17,7 +17,9 @@ import {
 } from "./library";
 import type { Progress } from "./importer";
 import { toM3u, trackPath } from "./m3u";
+import { slimAudio } from "./slim";
 import { names } from "./summary";
+import { sourceSize } from "./tags";
 import type { Play, Playlist, RemovedSong, Track } from "./types";
 import { zip } from "./zip";
 
@@ -188,9 +190,9 @@ function samePlace(a: string[], b: string[]): boolean {
 }
 
 // Only songs added by this import get their likes, plays and edits back; songs already here keep their own. The size
-// must match too, since names like "Track 01.mp3" repeat. copies are picked files skipped as copies of songs already
-// here, found under the picked path. Playlists come back only when the pick held some of the backup's songs, so
-// rescanning a linked folder that holds a backup does nothing.
+// must match too, since names like "Track 01.mp3" repeat; the original file's size counts, as a backup may hold it.
+// copies are picked files skipped as copies of songs already here, found under the picked path. Playlists come back
+// only when the pick held some of the backup's songs, so rescanning a linked folder that holds a backup does nothing.
 export function restorePlan(
   backup: Backup,
   tracks: Track[],
@@ -217,7 +219,7 @@ export function restorePlan(
   for (const saved of backup.tracks) {
     const want = segments(saved.path);
     const options = (byName.get(want.at(-1) ?? "") ?? []).filter(
-      (o) => samePlace(want, segments(o.path)) && (!saved.size || !o.track.size || saved.size === o.track.size),
+      (o) => samePlace(want, segments(o.path)) && (!saved.size || !o.track.size || saved.size === o.track.size || saved.size === sourceSize(o.track.sourceKey)),
     );
     const match = options.find((o) => fresh.has(o.track.id) || copied.has(o.path)) ?? options[0];
     if (!match) continue;
@@ -361,7 +363,9 @@ export async function backupToFolder(onProgress: (p: Progress) => void, signal?:
       if (!blob) throw new Error("No stored copy");
       const parts = planned.get(t.id)!.split("/");
       const name = parts.pop()!;
-      const result = await writeNew(await folderAt(parts), name, blob, (file) => sameBytes(file, blob));
+      // A file from an earlier backup may still hold the cover the stored copy has since dropped.
+      const same = async (file: File) => (await sameBytes(file, blob)) || (await sameBytes((await slimAudio(file)) ?? file, blob));
+      const result = await writeNew(await folderAt(parts), name, blob, same);
       written.set(t.id, [...parts, result.name].join("/"));
       if (result.written) wrote++;
     } catch {

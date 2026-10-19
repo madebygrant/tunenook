@@ -2,6 +2,7 @@ import { hasPlaylist, isBackupFile, parseBackup, restoreBackup, type Backup } fr
 import { contentKey } from "./contentKey";
 import { addTrack, albumCover, createPlaylist, getTracks, hasArt, patchTrack, trackAlbumKey } from "./library";
 import { isPlaylistFile, m3uEntries, matchEntries, playlistName, trackPath } from "./m3u";
+import { slimAudio } from "./slim";
 import { guessFromFileName, isAudioFile, sourceKey, UNKNOWN_ARTIST } from "./tags";
 import type { Track, TrackSource } from "./types";
 
@@ -206,7 +207,12 @@ export async function importItems(
       }
       const read = await readTrack(file, source, pendingArt);
       read.track.contentKey = content;
-      await addTrack({ track: read.track, art: read.art, file: source.kind === "copied" ? file : undefined });
+      // A song with a saved cover doesn't need the one in its file. Without one, a cover that couldn't be read
+      // stays in the file, the only copy of it.
+      const slim = source.kind === "copied" && read.track.artId ? await slimAudio(file) : null;
+      const stored = source.kind === "copied" ? (slim ?? file) : undefined;
+      if (stored) read.track.size = stored.size;
+      await addTrack({ track: read.track, art: read.art, file: stored });
       bySource.set(key, read.track.id);
       byContent.set(content, read.track.id);
       summary.added++;

@@ -3,7 +3,7 @@ import { formatBytes, plural } from "../lib/format";
 import { useJob } from "../lib/job";
 import { artBytes, useAlbums, usePlaylists, usePlays, useRemovedSongs, useTrackMap, useTracks } from "../lib/library";
 import { useStorage } from "../lib/storage";
-import { largestAlbums, largestSongs, playlistSizes, share, usageParts, type PartKey } from "../lib/storageUse";
+import { audioBytes, largestAlbums, largestSongs, playlistSizes, share, usageParts, type PartKey } from "../lib/storageUse";
 import type { Track } from "../lib/types";
 import { ArrowLeftIcon } from "./icons";
 import { Button } from "./ui";
@@ -80,9 +80,9 @@ export function StoragePage({
   const removed = useRemovedSongs();
   const busy = useJob()?.running ?? false;
   const artCount = useMemo(() => new Set(tracks.map((t) => t.artId)).size, [tracks]);
-  // Plays and imports change the song list often; sizes only move when songs or covers come and go, and an
-  // import's are read once it's done.
-  const measureKey = busy ? null : `${tracks.length}:${artCount}`;
+  // Plays change the song list often, so this keys on what moves sizes: songs and covers coming and going, and
+  // stored songs shrinking as their covers are dropped. An import's are read once it's done.
+  const measureKey = busy ? null : `${tracks.length}:${artCount}:${audioBytes(tracks)}`;
   const storage = useStorage(measureKey ?? "busy");
   const [art, setArt] = useState<{ key: string; bytes: number | null } | null>(null);
   const [active, setActive] = useState<PartKey | null>(null);

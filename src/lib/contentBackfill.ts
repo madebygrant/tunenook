@@ -1,28 +1,13 @@
 import { contentKey } from "./contentKey";
 import { isGranted, linkedFile } from "./folders";
+import { idle, PAUSE_MS, shouldPause, wait } from "./idle";
 import { getTracks, showQuietChanges, storedFile, updateTracks } from "./library";
-import { getNowPlaying } from "./player";
-import { isIOS } from "./standalone";
 import type { Track } from "./types";
 
 const BATCH = 8;
-const PAUSE_MS = 5000;
 
 let running: Promise<void> | null = null;
 let again = false;
-
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-// Safari has no requestIdleCallback, so it gets a short timeout instead.
-function idle(): Promise<void> {
-  return new Promise((resolve) => {
-    if ("requestIdleCallback" in window) requestIdleCallback(() => resolve(), { timeout: 2000 });
-    else setTimeout(resolve, 200);
-  });
-}
-
-// iOS gives a web app little time in the background, and reading files then can stall the audio.
-const shouldPause = () => isIOS() && getNowPlaying().playing;
 
 // Linked songs only while their folder is already allowed: reading them otherwise fails, and asking would prompt.
 const readable = (t: Track) => !t.contentKey && (t.source.kind === "copied" || (t.source.kind === "linked" && isGranted(t.source.folderId)));
