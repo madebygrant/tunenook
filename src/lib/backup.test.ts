@@ -26,7 +26,13 @@ describe("backup and restore", () => {
     makeTrack("a", { path: "Album/01 One.mp3", title: "One (fixed)", album: "Album", likedAt: 5, playCount: 3, lastPlayedAt: 9, addedAt: 2 }),
     makeTrack("b", { path: "Album/02 Two.mp3", title: "Two", album: "Album" }),
   ];
-  const backup = buildBackup(before, [playlist("Mix", ["b", "a", "b"])], backupPaths(before), 100);
+  const plays = [
+    { id: "p1", trackId: "a", at: 7 },
+    { id: "p2", trackId: "gone", at: 8 },
+    { id: "p3", trackId: "a", at: 9 },
+  ];
+  const removed = new Map([["gone", { id: "gone", title: "Old", artist: "Band", album: "", albumArtist: "Band", removedAt: 8 }]]);
+  const backup = buildBackup(before, [playlist("Mix", ["b", "a", "b"])], backupPaths(before), 100, { plays, removed });
 
   it("survives JSON and is found by name", () => {
     expect(parseBackup(JSON.stringify(backup))).toEqual(JSON.parse(JSON.stringify(backup)));
@@ -54,13 +60,29 @@ describe("backup and restore", () => {
     const plan = restorePlan(backup, after, new Set(["x", "y"]));
     expect(plan.tags).toEqual(new Map([["x", { title: "One (fixed)" }]]));
     expect(plan.stats.get("x")).toEqual({ addedAt: 2, likedAt: 5, playCount: 3, lastPlayedAt: 9 });
+    expect(plan.plays).toEqual([
+      { trackId: "x", at: 7 },
+      { trackId: "x", at: 9 },
+    ]);
+    expect(plan.removed).toEqual([{ song: { title: "Old", artist: "Band", album: "", albumArtist: "Band", removedAt: 8 }, plays: [8] }]);
     expect(plan.playlists).toEqual([{ name: "Mix", ids: ["y", "x", "y"], missing: 0 }]);
   });
 
   it("does nothing when the import brought none of the backup's songs, as when a linked folder is rescanned", () => {
     const after = [makeTrack("old", { path: "Album/01 One.mp3", title: "One" }), makeTrack("new", { path: "Other/x.mp3" })];
     const plan = restorePlan(backup, after, new Set(["new"]));
-    expect(plan).toEqual({ tags: new Map(), stats: new Map(), playlists: [] });
+    expect(plan).toEqual({ tags: new Map(), stats: new Map(), plays: [], removed: [], playlists: [] });
+  });
+
+  it("treats hand-edited play lists that aren't lists of numbers as no plays", () => {
+    const edited = JSON.parse(JSON.stringify(backup));
+    edited.tracks[0].plays = { at: 7 };
+    edited.tracks[1].plays = [1, "2", null];
+    edited.removed = [{ title: "Old", plays: "8" }, null];
+    const after = [makeTrack("x", { path: "Album/01 One.mp3" }), makeTrack("y", { path: "Album/02 Two.mp3" })];
+    const plan = restorePlan(edited, after, new Set(["x", "y"]));
+    expect(plan.plays).toEqual([{ trackId: "y", at: 1 }]);
+    expect(plan.removed).toEqual([]);
   });
 
   it("doesn't take a same-named file from another album or one of another size", () => {

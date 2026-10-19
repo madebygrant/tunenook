@@ -6,7 +6,7 @@ import { download } from "../lib/download";
 import { formatBytes, plural } from "../lib/format";
 import { bytesToImport, importFiles } from "../lib/importer";
 import { cancelJob, dismissJob, runJob, useJob } from "../lib/job";
-import { getTracks, useAlbums, useFolders, useTracks } from "../lib/library";
+import { clearRemovedHistory, getTracks, useAlbums, useFolders, useRemovedPlays, useTracks } from "../lib/library";
 import { promptInstall, useCanInstall } from "../lib/pwa";
 import { isIOS, useStandalone } from "../lib/standalone";
 import { ensurePersistence, freeBytes, useStorage } from "../lib/storage";
@@ -35,6 +35,8 @@ export function AddMusic() {
   const files = useRef<HTMLInputElement>(null);
   const folder = useRef<HTMLInputElement>(null);
   const [ios] = useState(() => isIOS());
+  const removedPlays = useRemovedPlays();
+  const [clearingHistory, setClearingHistory] = useState(false);
 
   // React has no prop for webkitdirectory.
   useEffect(() => {
@@ -183,6 +185,17 @@ export function AddMusic() {
                 ? "The browser won't clear it to free space."
                 : "The browser may clear it if the device runs low on space."}
             </p>
+            <div className="storage-history">
+              <p className="muted">
+                Play history covers the last two years.
+                {removedPlays > 0 && ` ${plural(removedPlays, "play")} of songs you've removed ${removedPlays === 1 ? "is" : "are"} still in it.`}
+              </p>
+              {removedPlays > 0 && (
+                <Button variant="secondary" small icon={<TrashIcon />} disabled={job?.running} onClick={() => setClearingHistory(true)}>
+                  Clear removed songs' history
+                </Button>
+              )}
+            </div>
             {!storage.persisted && !standalone && ios && (
               <p className="muted">Add TuneNook to your Home Screen and iOS keeps its storage.</p>
             )}
@@ -204,6 +217,22 @@ export function AddMusic() {
               </div>
             )}
           </Panel>
+        )}
+        {clearingHistory && (
+          <Dialog label="Clear removed songs' history" onClose={() => setClearingHistory(false)}>
+            <div className="dialog-head">
+              <h2 className="h3">Clear removed songs' history?</h2>
+            </div>
+            <Confirm
+              message={`${plural(removedPlays, "play")} of songs no longer in your library will be deleted. Songs still here keep their history.`}
+              action="Clear history"
+              onCancel={() => setClearingHistory(false)}
+              onConfirm={() => {
+                setClearingHistory(false);
+                void runJob("Clearing history", async () => `Deleted ${plural(await clearRemovedHistory(), "play")} of removed songs.`);
+              }}
+            />
+          </Dialog>
         )}
         {spaceWarning && (
           <Dialog label="Not enough space" className="space-warning" onClose={() => setSpaceWarning(null)}>

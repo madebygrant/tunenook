@@ -80,6 +80,139 @@ describe("savePlaylist", () => {
   });
 });
 
+describe("play log", () => {
+  it("logs each counted play with its time and keeps it across a reload", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const { library } = await load();
+    await library.addTrack({ track: makeTrack("a") });
+    vi.setSystemTime(1000);
+    await library.recordPlay("a");
+    vi.setSystemTime(2000);
+    await library.recordPlay("a");
+    vi.useRealTimers();
+    vi.resetModules();
+    const reloaded = await load();
+    expect(reloaded.library.getPlays().map((p) => [p.trackId, p.at])).toEqual([
+      ["a", 1000],
+      ["a", 2000],
+    ]);
+    expect(reloaded.library.getTrack("a")?.playCount).toBe(2);
+  });
+
+  it("keeps a removed song's plays and name until its history is cleared", async () => {
+    const { library, db } = await load();
+    await library.addTrack({ track: makeTrack("a") });
+    await library.addTrack({ track: makeTrack("b") });
+    await library.recordPlay("a");
+    await library.recordPlay("b");
+    await library.removeTracks(new Set(["a"]));
+    expect(library.getPlays().map((p) => p.trackId)).toEqual(["a", "b"]);
+    expect(library.getRemovedSongs().get("a")?.title).toBe("Song a");
+
+    vi.resetModules();
+    const reloaded = await load();
+    expect(reloaded.library.getRemovedSongs().get("a")?.title).toBe("Song a");
+    expect(await reloaded.library.clearRemovedHistory()).toBe(1);
+    expect(reloaded.library.getPlays().map((p) => p.trackId)).toEqual(["b"]);
+    expect(reloaded.library.getRemovedSongs().get("a")).toBeUndefined();
+    expect(await db.get("removed", "a")).toBeUndefined();
+  });
+
+  it("doesn't keep a name for a removed song that was never played", async () => {
+    const { library, db } = await load();
+    await library.addTrack({ track: makeTrack("a") });
+    await library.removeTracks(new Set(["a"]));
+    expect(await db.get("removed", "a")).toBeUndefined();
+  });
+
+  it("drops plays older than two years when the library loads, and from a restore", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2024-01-10"));
+    const { library } = await load();
+    await library.addTrack({ track: makeTrack("a") });
+    await library.recordPlay("a");
+    vi.setSystemTime(new Date("2025-06-01"));
+    await library.recordPlay("a");
+    vi.setSystemTime(new Date("2026-01-11"));
+    vi.resetModules();
+    const reloaded = await load();
+    await reloaded.library.addPlays([{ trackId: "a", at: new Date("2023-12-01").getTime() }], "failed");
+    const years = async () => (await reloaded.db.getAll<import("./types").Play>("plays")).map((p) => new Date(p.at).getFullYear());
+    await vi.waitFor(async () => expect(await years()).toEqual([2025]));
+    expect(reloaded.library.getPlays().map((p) => new Date(p.at).getFullYear())).toEqual([2025]);
+    vi.useRealTimers();
+  });
+
+  it("doesn't log a play for a song removed while it waited, or for one that was never saved", async () => {
+    const { library } = await load();
+    await library.addTrack({ track: makeTrack("a") });
+    library.addSessionTracks([{ track: makeTrack("s", { source: { kind: "session" } }), file: new Blob(["opened"]) }]);
+    await Promise.all([library.removeTracks(new Set(["a"])), library.recordPlay("a"), library.recordPlay("s")]);
+    expect(library.getPlays()).toEqual([]);
+  });
+
+  it("keeps restored plays in time order among newer ones", async () => {
+    const { library } = await load();
+    await library.addTrack({ track: makeTrack("a") });
+    await library.recordPlay("a");
+    const earlier = Date.now() - 60_000;
+    await library.addPlays([{ trackId: "a", at: earlier }], "failed");
+    expect(library.getPlays()[0].at).toBe(earlier);
+  });
+
+  it("restores a removed song's history once, even from the same backup twice", async () => {
+    const { library, db } = await load();
+    const at = Date.now() - 60_000;
+    const entry = { song: { title: "Old", artist: "Band", album: "", albumArtist: "Band", removedAt: at }, plays: [at, at + 1] };
+    await library.addRemovedHistory([entry], "failed");
+    await library.addRemovedHistory([entry], "failed");
+    expect([...library.getRemovedSongs().values()].map((s) => s.title)).toEqual(["Old"]);
+    expect(library.getPlays()).toHaveLength(2);
+    expect(await db.getAll("plays")).toHaveLength(2);
+  });
+
+  it("saves neither the count nor the log entry when the save fails", async () => {
+    const { library } = await load();
+    await library.addTrack({ track: makeTrack("a") });
+    const db = await import("./db");
+    const real = db.write;
+    const spy = vi.spyOn(db, "write").mockRejectedValueOnce(new DOMException("Full", "QuotaExceededError"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    await library.recordPlay("a");
+    expect(library.getPlays()).toEqual([]);
+    expect(library.getTrack("a")?.playCount).toBeUndefined();
+    spy.mockImplementation(real);
+    vi.restoreAllMocks();
+  });
+
+  it("adds the play log to a database made before it existed", async () => {
+    await new Promise<void>((resolve, reject) => {
+      const req = indexedDB.open("tunenook", 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        db.createObjectStore("tracks", { keyPath: "id" });
+        db.createObjectStore("files");
+        db.createObjectStore("art");
+        db.createObjectStore("playlists", { keyPath: "id" });
+        db.createObjectStore("folders", { keyPath: "id" });
+      };
+      req.onsuccess = () => {
+        const tx = req.result.transaction("tracks", "readwrite");
+        tx.objectStore("tracks").put(makeTrack("old", { playCount: 4 }));
+        tx.oncomplete = () => {
+          req.result.close();
+          resolve();
+        };
+      };
+      req.onerror = () => reject(req.error);
+    });
+    const { library } = await load();
+    expect(library.getTrack("old")?.playCount).toBe(4);
+    await library.recordPlay("old");
+    expect(library.getPlays().map((p) => p.trackId)).toEqual(["old"]);
+  });
+});
+
 describe("plays and likes", () => {
   it("keeps both a like and a play count made at the same moment", async () => {
     const { library, db } = await load();

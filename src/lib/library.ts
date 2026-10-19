@@ -4,7 +4,7 @@ import { newPlaylist, renamed, withoutTracks, withTracks } from "./playlists";
 import { compareText } from "./format";
 import { createListeners } from "./store";
 import { albumKey } from "./tags";
-import type { Album, Artist, LinkedFolder, Playlist, Track } from "./types";
+import type { Album, Artist, LinkedFolder, Play, Playlist, RemovedSong, Track } from "./types";
 
 // The live set of tracks. The arrays and maps handed to React are snapshots of it, rebuilt on publish.
 const store = new Map<string, Track>();
@@ -21,6 +21,9 @@ let artistKeys = new Set<string>();
 let dirty = false;
 let playlists: Playlist[] = [];
 let folders: LinkedFolder[] = [];
+let plays: Play[] = [];
+let removedSongs = new Map<string, RemovedSong>();
+let removedPlays = 0;
 let loaded = false;
 let loadError: string | null = null;
 const { emit, subscribe } = createListeners();
@@ -168,11 +171,22 @@ export function byDiscAndTrack(a: Track, b: Track): number {
 
 export async function loadLibrary(): Promise<void> {
   try {
-    const [t, p, f] = await Promise.all([getAll<Track>("tracks"), getAll<Playlist>("playlists"), getAll<LinkedFolder>("folders")]);
+    const [t, p, f, pl, r] = await Promise.all([
+      getAll<Track>("tracks"),
+      getAll<Playlist>("playlists"),
+      getAll<LinkedFolder>("folders"),
+      getAll<Play>("plays"),
+      getAll<RemovedSong>("removed"),
+    ]);
     t.forEach(putTrack);
     playlists = p.sort((a, b) => a.createdAt - b.createdAt);
     folders = f;
+    // Restored plays are added after newer ones, so key order isn't time order.
+    plays = pl.sort((a, b) => a.at - b.at);
+    removedSongs = new Map(r.map((s) => [s.id, s]));
+    countRemovedPlays();
     loaded = true;
+    void prunePlays();
   } catch (e) {
     loadError = e instanceof Error ? e.message : "Storage is unavailable.";
     throw e;
@@ -190,6 +204,71 @@ export function storedBytes(): number {
   let total = 0;
   for (const t of store.values()) if (t.source.kind === "copied") total += t.size;
   return total;
+}
+
+// Oldest first, including plays of removed songs. Replaced on change, never edited in place.
+export function getPlays(): readonly Play[] {
+  return plays;
+}
+
+export function getRemovedSongs(): ReadonlyMap<string, RemovedSong> {
+  return removedSongs;
+}
+
+function logged(added: Play[]): void {
+  if (added.length === 0) return;
+  plays = [...plays, ...added].sort((a, b) => a.at - b.at);
+  emit();
+}
+
+export function useRemovedPlays(): number {
+  return useSyncExternalStore(subscribe, () => removedPlays);
+}
+
+function countRemovedPlays(): void {
+  removedPlays = plays.reduce((n, p) => (store.has(p.trackId) ? n : n + 1), 0);
+}
+
+// The Storage panel says "two years".
+const PLAY_LOG_YEARS = 2;
+
+function playLogCutoff(now = Date.now()): number {
+  const date = new Date(now);
+  date.setFullYear(date.getFullYear() - PLAY_LOG_YEARS);
+  return date.getTime();
+}
+
+// Deletes the given plays, and the names of removed songs left with none.
+async function dropPlays(gone: (p: Play) => boolean): Promise<number> {
+  const dropped: Play[] = [];
+  const kept: Play[] = [];
+  for (const p of plays) (gone(p) ? dropped : kept).push(p);
+  if (dropped.length === 0) return 0;
+  const stillPlayed = new Set(kept.map((p) => p.trackId));
+  const forgotten = [...removedSongs.keys()].filter((id) => !stillPlayed.has(id));
+  await write([
+    ...dropped.map((p): Write => ({ store: "plays", op: "delete", key: p.id })),
+    ...forgotten.map((id): Write => ({ store: "removed", op: "delete", key: id })),
+  ]);
+  plays = kept;
+  forgotten.forEach((id) => removedSongs.delete(id));
+  countRemovedPlays();
+  emit();
+  return dropped.length;
+}
+
+// Memory keeps old plays until the delete lands, so a failure only retries at the next start.
+function prunePlays(now = Date.now()): Promise<void> {
+  const cutoff = playLogCutoff(now);
+  return queueTrackWrite(() => dropPlays((p) => p.at < cutoff)).then(
+    () => {},
+    (e) => console.error("Couldn't trim the play log", e),
+  );
+}
+
+// Returns how many plays were deleted.
+export function clearRemovedHistory(): Promise<number> {
+  return queueTrackWrite(() => dropPlays((p) => !store.has(p.trackId)));
 }
 
 export function getTrack(id: string): Track | undefined {
@@ -356,9 +435,10 @@ type TrackPatch = Partial<Omit<Track, "id">>;
 // Memory first, so a tap shows at once and quick changes build on each other. One queued write saves whatever
 // memory holds by then; if it fails, memory goes back to what storage has.
 // quiet is for fields no screen shows: memory and storage update now, and showQuietChanges publishes them later.
+// extra is saved in the same transaction, and only if the songs are still here.
 export function updateTracks(
   patches: ReadonlyMap<string, TrackPatch>,
-  options: { now?: boolean; quiet?: boolean; failure?: string } = {},
+  options: { now?: boolean; quiet?: boolean; failure?: string; extra?: Write[] } = {},
 ): Promise<boolean> {
   const ids = [...patches.keys()].filter((id) => store.has(id));
   if (ids.length === 0) return Promise.resolve(false);
@@ -369,7 +449,7 @@ export function updateTracks(
     const latest = ids.map((id) => store.get(id)).filter((t): t is Track => t !== undefined);
     if (latest.length === 0) return false;
     try {
-      await write(latest.map((t) => ({ store: "tracks", op: "put", value: t })));
+      await write([...(options.extra ?? []), ...latest.map((t): Write => ({ store: "tracks", op: "put", value: t }))]);
       return true;
     } catch (e) {
       const saved = await Promise.all(latest.map((t) => get<Track>("tracks", t.id).catch(() => undefined)));
@@ -387,7 +467,11 @@ export function showQuietChanges(): void {
   if (dirty) publishSoon();
 }
 
-export function updateTrack(id: string, patch: TrackPatch, options: { now?: boolean; failure?: string } = {}): Promise<boolean> {
+export function updateTrack(
+  id: string,
+  patch: TrackPatch,
+  options: { now?: boolean; failure?: string; extra?: Write[] } = {},
+): Promise<boolean> {
   return updateTracks(new Map([[id, patch]]), options);
 }
 
@@ -492,8 +576,72 @@ export function setTracksArt(ids: string[], blob: Blob, { ifMissing = false } = 
 
 export async function recordPlay(id: string): Promise<void> {
   const track = store.get(id);
-  // A missed count isn't worth interrupting playback over, so failures are only logged.
-  if (track) await updateTrack(id, { playCount: (track.playCount ?? 0) + 1, lastPlayedAt: Date.now() });
+  if (!track) return;
+  const play: Play = { id: crypto.randomUUID(), trackId: id, at: Date.now() };
+  // Count and log entry save together, so they can't disagree. A failed save is only logged, not shown.
+  const saved = await updateTrack(
+    id,
+    { playCount: (track.playCount ?? 0) + 1, lastPlayedAt: play.at },
+    { extra: [{ store: "plays", op: "put", value: play }] },
+  );
+  if (saved) logged([play]);
+}
+
+// For restores. Queued with song writes, so plays can't be added for a song removed just before.
+export function addPlays(entries: Omit<Play, "id">[], failure: string): Promise<boolean> {
+  return queueTrackWrite(async () => {
+    const cutoff = playLogCutoff();
+    const added = entries.filter((e) => store.has(e.trackId) && e.at >= cutoff).map((e) => ({ ...e, id: crypto.randomUUID() }));
+    try {
+      await write(added.map((p): Write => ({ store: "plays", op: "put", value: p })));
+      logged(added);
+      return true;
+    } catch (e) {
+      reportError(failure, e);
+      return false;
+    }
+  });
+}
+
+export interface RemovedHistory {
+  song: Omit<RemovedSong, "id">;
+  plays: number[];
+}
+
+const sameSong = (a: Omit<RemovedSong, "id">, b: Omit<RemovedSong, "id">) =>
+  a.title === b.title && a.artist === b.artist && a.album === b.album && a.albumArtist === b.albumArtist;
+
+// For restores. A removed song whose plays are all here already is skipped, so restoring twice adds nothing.
+export function addRemovedHistory(entries: RemovedHistory[], failure: string): Promise<boolean> {
+  return queueTrackWrite(async () => {
+    const cutoff = playLogCutoff();
+    const songs: RemovedSong[] = [];
+    const added: Play[] = [];
+    for (const { song, plays: times } of entries) {
+      const recent = times.filter((at) => at >= cutoff);
+      if (recent.length === 0) continue;
+      const known = [...removedSongs.values()].filter((s) => sameSong(s, song)).map((s) => s.id);
+      const had = new Set(plays.filter((p) => known.includes(p.trackId)).map((p) => p.at));
+      if (recent.every((at) => had.has(at))) continue;
+      const id = crypto.randomUUID();
+      songs.push({ ...song, id });
+      added.push(...recent.map((at) => ({ id: crypto.randomUUID(), trackId: id, at })));
+    }
+    try {
+      await write([
+        ...songs.map((s): Write => ({ store: "removed", op: "put", value: s })),
+        ...added.map((p): Write => ({ store: "plays", op: "put", value: p })),
+      ]);
+      songs.forEach((s) => removedSongs.set(s.id, s));
+      plays = [...plays, ...added].sort((a, b) => a.at - b.at);
+      countRemovedPlays();
+      emit();
+      return true;
+    } catch (e) {
+      reportError(failure, e);
+      return false;
+    }
+  });
 }
 
 export async function toggleLike(id: string): Promise<void> {
@@ -529,11 +677,19 @@ export function removeTracks(ids: ReadonlySet<string>): Promise<void> {
     }
     const unusedArt = [...freedArt].filter(([artId, n]) => (artUsers.get(artId) ?? 0) <= n).map(([artId]) => artId);
     unusedArt.forEach((artId) => writes.push({ store: "art", op: "delete", key: artId }));
+    // Plays outlive the song, so its name is kept for them.
+    const played = new Set(plays.map((p) => p.trackId));
+    const remembered = gone
+      .filter((t) => played.has(t.id))
+      .map((t): RemovedSong => ({ id: t.id, title: t.title, artist: t.artist, album: t.album, albumArtist: t.albumArtist, removedAt: now }));
+    remembered.forEach((s) => writes.push({ store: "removed", op: "put", value: s }));
     changed.forEach((p, i) => p !== playlists[i] && writes.push({ store: "playlists", op: "put", value: p }));
     await write(writes);
     unusedArt.forEach(forgetArt);
     gone.forEach((t) => dropTrack(t.id));
     playlists = changed;
+    remembered.forEach((s) => removedSongs.set(s.id, s));
+    countRemovedPlays();
     publish();
     removedListeners.forEach((listener) => listener(ids));
   });

@@ -1,11 +1,24 @@
 import { contentKey } from "./contentKey";
 import { safeFileName } from "./download";
 import { plural } from "./format";
-import { createPlaylist, editTracks, getPlaylists, getTracks, storedFile, updateTracks, type TagEdit } from "./library";
+import {
+  addPlays,
+  addRemovedHistory,
+  createPlaylist,
+  editTracks,
+  getPlays,
+  getPlaylists,
+  getRemovedSongs,
+  getTracks,
+  storedFile,
+  updateTracks,
+  type RemovedHistory,
+  type TagEdit,
+} from "./library";
 import type { Progress } from "./importer";
 import { toM3u, trackPath } from "./m3u";
 import { names } from "./summary";
-import type { Playlist, Track } from "./types";
+import type { Play, Playlist, RemovedSong, Track } from "./types";
 import { zip } from "./zip";
 
 export const BACKUP_FILE = "tunenook-backup.json";
@@ -26,6 +39,17 @@ export interface BackupTrack extends Required<TagEdit> {
   likedAt?: number;
   playCount?: number;
   lastPlayedAt?: number;
+  // When each counted play happened, oldest first. Backups from before the play log have none.
+  plays?: number[];
+}
+
+export interface BackupRemoved {
+  title: string;
+  artist: string;
+  album: string;
+  albumArtist: string;
+  removedAt: number;
+  plays: number[];
 }
 
 export interface Backup {
@@ -34,6 +58,19 @@ export interface Backup {
   exportedAt: number;
   tracks: BackupTrack[];
   playlists: { name: string; paths: string[] }[];
+  // Removed songs that still have plays in the log. Backups from before the play log have none.
+  removed?: BackupRemoved[];
+}
+
+export interface History {
+  plays: readonly Play[];
+  removed: ReadonlyMap<string, RemovedSong>;
+}
+
+const NO_HISTORY: History = { plays: [], removed: new Map() };
+
+function currentHistory(): History {
+  return { plays: getPlays(), removed: getRemovedSongs() };
 }
 
 function withNumber(name: string, n: number): string {
@@ -59,9 +96,21 @@ export function backupPaths(tracks: Track[]): Map<string, string> {
 }
 
 // written maps the songs saved into the backup folder to where they went; the rest keep the path they came from.
-export function buildBackup(tracks: Track[], playlists: Playlist[], written: ReadonlyMap<string, string>, now: number): Backup {
+export function buildBackup(
+  tracks: Track[],
+  playlists: Playlist[],
+  written: ReadonlyMap<string, string>,
+  now: number,
+  history: History = NO_HISTORY,
+): Backup {
   const pathOf = (t: Track) => written.get(t.id) ?? trackPath(t);
   const byId = new Map(tracks.map((t) => [t.id, t]));
+  const playsOf = new Map<string, number[]>();
+  for (const p of history.plays) {
+    const list = playsOf.get(p.trackId);
+    if (list) list.push(p.at);
+    else playsOf.set(p.trackId, [p.at]);
+  }
   return {
     app: "tunenook",
     version: 1,
@@ -75,6 +124,7 @@ export function buildBackup(tracks: Track[], playlists: Playlist[], written: Rea
       likedAt: t.likedAt,
       playCount: t.playCount,
       lastPlayedAt: t.lastPlayedAt,
+      plays: playsOf.get(t.id),
     })) as BackupTrack[],
     playlists: playlists.map((p) => ({
       name: p.name,
@@ -83,6 +133,10 @@ export function buildBackup(tracks: Track[], playlists: Playlist[], written: Rea
         return t ? [pathOf(t)] : [];
       }),
     })),
+    removed: [...history.removed.values()].flatMap((s) => {
+      const plays = playsOf.get(s.id);
+      return plays ? [{ title: s.title, artist: s.artist, album: s.album, albumArtist: s.albumArtist, removedAt: s.removedAt, plays }] : [];
+    }),
   };
 }
 
@@ -116,8 +170,13 @@ export function parseBackup(text: string): Backup | null {
 export interface RestorePlan {
   tags: Map<string, TagEdit>;
   stats: Map<string, Partial<Track>>;
+  plays: { trackId: string; at: number }[];
+  removed: RemovedHistory[];
   playlists: { name: string; ids: string[]; missing: number }[];
 }
+
+// Backup files can be edited by hand, so anything that isn't a list of numbers counts as no plays.
+const times = (value: unknown): number[] => (Array.isArray(value) ? value.filter((v): v is number => Number.isFinite(v)) : []);
 
 const segments = (path: string) => path.toLowerCase().split("/").filter(Boolean);
 
@@ -154,7 +213,7 @@ export function restorePlan(
   const copied = new Set(copies.map((c) => c.path));
   let picked = 0;
   const idByPath = new Map<string, string>();
-  const plan: RestorePlan = { tags: new Map(), stats: new Map(), playlists: [] };
+  const plan: RestorePlan = { tags: new Map(), stats: new Map(), plays: [], removed: [], playlists: [] };
   for (const saved of backup.tracks) {
     const want = segments(saved.path);
     const options = (byName.get(want.at(-1) ?? "") ?? []).filter(
@@ -169,8 +228,16 @@ export function restorePlan(
     const changed = TAGS.filter((k) => saved[k] !== undefined && saved[k] !== t[k]);
     if (changed.length) plan.tags.set(t.id, Object.fromEntries(changed.map((k) => [k, saved[k]])));
     plan.stats.set(t.id, { addedAt: saved.addedAt, likedAt: saved.likedAt, playCount: saved.playCount, lastPlayedAt: saved.lastPlayedAt });
+    for (const at of times(saved.plays)) plan.plays.push({ trackId: t.id, at });
   }
   if (picked === 0) return plan;
+  plan.removed = (Array.isArray(backup.removed) ? backup.removed : []).flatMap((r) => {
+    const plays = times(r?.plays);
+    if (plays.length === 0) return [];
+    const text = (v: unknown) => (typeof v === "string" ? v : "");
+    const song = { title: text(r.title), artist: text(r.artist), album: text(r.album), albumArtist: text(r.albumArtist) };
+    return [{ song: { ...song, removedAt: typeof r.removedAt === "number" ? r.removedAt : 0 }, plays }];
+  });
   for (const p of backup.playlists) {
     const found = p.paths.flatMap((path) => idByPath.get(path) ?? []);
     plan.playlists.push({ name: p.name, ids: found, missing: p.paths.length - found.length });
@@ -191,6 +258,8 @@ export async function restoreBackup(
   const plan = restorePlan(backup, getTracks(), fresh, copies);
   if (plan.tags.size) await editTracks(plan.tags);
   if (plan.stats.size) await updateTracks(plan.stats, { now: true, failure: "Couldn't restore likes and play counts." });
+  if (plan.plays.length) await addPlays(plan.plays, "Couldn't restore the dates of past plays.");
+  if (plan.removed.length) await addRemovedHistory(plan.removed, "Couldn't restore the history of removed songs.");
   let playlists = 0;
   let missing = 0;
   for (const p of plan.playlists) {
@@ -303,7 +372,7 @@ export async function backupToFolder(onProgress: (p: Progress) => void, signal?:
 
   // Songs that couldn't be written are left out, so a restore can't pin their details on some other file.
   const kept = tracks.filter((t) => !failed.has(t.id));
-  const backup = buildBackup(kept, getPlaylists(), written, Date.now());
+  const backup = buildBackup(kept, getPlaylists(), written, Date.now(), currentHistory());
   const latest = await newestBackup(root);
   let backupName: string | null = null;
   if (!latest || undated(latest) !== undated(backup)) {
@@ -337,7 +406,7 @@ export async function backupToFolder(onProgress: (p: Progress) => void, signal?:
 
 // Without folder access the audio can't be written out, and zipping it all wouldn't fit in a phone's memory.
 export function backupZip(now = Date.now()): Blob {
-  const backup = buildBackup(getTracks(), getPlaylists(), new Map(), now);
+  const backup = buildBackup(getTracks(), getPlaylists(), new Map(), now, currentHistory());
   return zip([
     { name: BACKUP_FILE, text: JSON.stringify(backup, null, 1) },
     ...playlistFiles(backup).map((f) => ({ name: `Playlists/${f.name}`, text: f.text })),

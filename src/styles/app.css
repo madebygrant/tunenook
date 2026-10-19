@@ -95,7 +95,7 @@ dd {
   font-family: var(--font-display);
   font-weight: 300;
   font-size: clamp(32px, 6vw, 48px);
-  line-height: 1.05;
+  line-height: 1.2;
   letter-spacing: -0.03em;
   color: var(--text);
   overflow-wrap: break-word;
@@ -1523,10 +1523,21 @@ kbd {
   .xh-player.is-collapsed {
     grid-template-areas: "art meta transport toggle";
     grid-template-columns: auto minmax(0, 1fr) auto auto;
-    padding-bottom: 12px;
+    min-height: 0;
+    padding: 8px 12px;
   }
   .xh-player.is-collapsed .meta .ttl {
     -webkit-line-clamp: 1;
+  }
+  .xh-player.is-collapsed > .xh-art {
+    width: 40px;
+    height: 40px;
+  }
+  .xh-player.is-collapsed .xh-play {
+    height: 32px;
+  }
+  .xh-player.is-collapsed .dock-toggle {
+    height: 32px;
   }
   .xh-player.is-collapsed > .xh-transport .xh-icon-btn,
   .xh-player.is-collapsed > .modes,
@@ -2152,7 +2163,11 @@ b.mono {
 .space-warning p + p {
   margin-top: 12px;
 }
-.storage-install {
+.storage-history p {
+  font-size: 14px;
+}
+.storage-install,
+.storage-history {
   display: grid;
   gap: 12px;
   justify-items: start;

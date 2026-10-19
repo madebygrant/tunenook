@@ -1,7 +1,7 @@
 const DB_NAME = "tunenook";
-const VERSION = 1;
+const VERSION = 3;
 
-export type StoreName = "tracks" | "files" | "art" | "playlists" | "folders";
+export type StoreName = "tracks" | "files" | "art" | "playlists" | "folders" | "plays" | "removed";
 
 let opening: Promise<IDBDatabase> | null = null;
 
@@ -10,13 +10,21 @@ function open(): Promise<IDBDatabase> {
     const req = indexedDB.open(DB_NAME, VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
-      db.createObjectStore("tracks", { keyPath: "id" });
+      // Creates whatever is missing, so any earlier version upgrades the same way.
+      const create = (name: StoreName, options?: IDBObjectStoreParameters) => {
+        if (!db.objectStoreNames.contains(name)) db.createObjectStore(name, options);
+      };
+      create("tracks", { keyPath: "id" });
       // Audio and artwork blobs sit apart from the metadata so loading the library never reads them.
-      db.createObjectStore("files");
-      db.createObjectStore("art");
-      db.createObjectStore("playlists", { keyPath: "id" });
+      create("files");
+      create("art");
+      create("playlists", { keyPath: "id" });
       // Directory handles from showDirectoryPicker; Chromium only, empty elsewhere.
-      db.createObjectStore("folders", { keyPath: "id" });
+      create("folders", { keyPath: "id" });
+      // One record per counted play, so plays can be totalled for any stretch of time.
+      create("plays", { keyPath: "id" });
+      // Names of removed songs that still have plays in the log.
+      create("removed", { keyPath: "id" });
     };
     req.onsuccess = () => {
       const db = req.result;
@@ -80,3 +88,4 @@ export async function write(writes: Write[]): Promise<void> {
   }
   await done(tx);
 }
+

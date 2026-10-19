@@ -29,6 +29,16 @@ export interface Track {
   likedAt?: number;
 }
 
+// A play that counted, kept with its time so plays can be totalled for any stretch, not only all time.
+export interface Play {
+  id: string;
+  trackId: string;
+  at: number;
+}
+
+// What a removed song was called, so its plays still mean something.
+export type RemovedSong = Pick<Track, "id" | "title" | "artist" | "album" | "albumArtist"> & { removedAt: number };
+
 export interface LinkedFolder {
   id: string;
   name: string;
