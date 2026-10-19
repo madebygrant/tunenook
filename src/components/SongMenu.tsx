@@ -1,7 +1,7 @@
 import { Fragment, useRef, useState, type ReactNode } from "react";
 import { plural } from "../lib/format";
 import { canLinkFolders, copyIntoLibrary, NeedsAccessError, requestAccess } from "../lib/folders";
-import { addToPlaylist, artistPageFor, hasAlbum, createPlaylist, toggleLike, getPlaylists, removeTracksSafely, savePlaylist, trackAlbumKey, usePlaylists } from "../lib/library";
+import { addToPlaylist, artistPageFor, hasAlbum, createPlaylist, toggleLike, getPlaylists, getTrack, removeTracksSafely, savePlaylist, trackAlbumKey, usePlaylists } from "../lib/library";
 import { addToQueue, playNext, removeFromQueue } from "../lib/player";
 import { movePlaylistRow, visiblePositions } from "../lib/playlistMoves";
 import { missingFrom, withoutIndexes } from "../lib/playlists";
@@ -9,6 +9,7 @@ import { libraryRemovalMessage } from "../lib/removal";
 import type { Playlist, Track } from "../lib/types";
 import { Dialog } from "./Dialog";
 import { TrackDetails } from "./EditDetails";
+import { ExportSongs } from "./ExportSongs";
 import { CloseIcon, PlusIcon } from "./icons";
 import { Button, TextField } from "./ui";
 import type { View } from "./Sidebar";
@@ -34,7 +35,7 @@ interface Props {
 
 export function SongMenu({ target, onClose, onNavigate, onEdited, onToast }: Props) {
   const { track, context } = target;
-  const [step, setStep] = useState<"actions" | "pick" | "confirm" | "edit">("actions");
+  const [step, setStep] = useState<"actions" | "pick" | "confirm" | "edit" | "export">("actions");
   const [error, setError] = useState<string | null>(null);
   const playlist = context.kind === "playlist" ? getPlaylists().find((p) => p.id === context.playlistId) : undefined;
 
@@ -92,6 +93,7 @@ export function SongMenu({ target, onClose, onNavigate, onEdited, onToast }: Pro
     if (row < last) items.push({ group: "context", label: "Move down", run: move(row + 1) }, { group: "context", label: "Move to bottom", run: move(last) });
   }
   if (canLinkFolders && track.source.kind === "linked") items.push({ group: "context", label: "Copy into TuneNook", run: () => void copy() });
+  if (track.source.kind === "copied") items.push({ group: "context", label: "Export song…", run: () => setStep("export") });
   if (context.kind === "playlist" && playlist) {
     const { index } = context;
     items.push({
@@ -111,6 +113,7 @@ export function SongMenu({ target, onClose, onNavigate, onEdited, onToast }: Pro
       {step === "actions" && <MenuList items={items} />}
       {step === "edit" && <TrackDetails track={track} onSaved={(message, edited) => run(() => onEdited(track, edited), message)} onCancel={() => setStep("actions")} />}
       {step === "pick" && <PlaylistPicker ids={[track.id]} name={track.title} onDone={(message) => run(() => {}, message)} />}
+      {step === "export" && <ExportSongs ids={[track.id]} onDone={(message) => run(() => {}, message)} />}
       {step === "confirm" && (
         <Confirm
           message={libraryRemovalMessage([track])}
@@ -303,7 +306,7 @@ export function CollectionMenu({
   onClose: () => void;
   onToast: (message: string) => void;
 }) {
-  const [picking, setPicking] = useState(false);
+  const [step, setStep] = useState<"actions" | "pick" | "export">("actions");
   const done = (message: string) => {
     onClose();
     onToast(message);
@@ -323,13 +326,16 @@ export function CollectionMenu({
         done(`Added ${title} to the queue.`);
       },
     },
-    { label: "Add to playlist…", run: () => setPicking(true) },
+    { label: "Add to playlist…", run: () => setStep("pick") },
     ...extraItems,
   ];
+  if (ids.some((id) => getTrack(id)?.source.kind === "copied")) items.push({ label: "Export songs…", run: () => setStep("export") });
 
   return (
     <MenuSheet label={`${title} options`} title={title} subtitle={subtitle} onClose={onClose}>
-      {picking ? <PlaylistPicker ids={ids} name={title} excludeId={excludePlaylistId} onDone={done} /> : <MenuList items={items} />}
+      {step === "actions" && <MenuList items={items} />}
+      {step === "pick" && <PlaylistPicker ids={ids} name={title} excludeId={excludePlaylistId} onDone={done} />}
+      {step === "export" && <ExportSongs ids={ids} onDone={done} />}
     </MenuSheet>
   );
 }

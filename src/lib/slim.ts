@@ -30,36 +30,58 @@ function concat(parts: Bytes[]): Bytes {
   return out;
 }
 
+const u32 = (n: number) => [(n >>> 24) & 0xff, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff];
+const text = (s: string) => Array.from(s, (c) => c.charCodeAt(0));
+
+interface Id3 {
+  head: Bytes;
+  version: number;
+  frames: { id: string; bytes: Bytes }[];
+  end: number;
+}
+
 // Only v2.3 and v2.4 tags with no flags set; anything else, or frames that don't add up, gives null.
-async function id3WithoutPictures(blob: Blob, at: number): Promise<{ bytes: Bytes; end: number } | null> {
+async function readId3(blob: Blob, at: number): Promise<Id3 | null> {
   const head = await bytesOf(blob, at, at + 10);
   const version = head[3];
   if ((version !== 3 && version !== 4) || head[5] !== 0 || !isSynchsafe(head, 6)) return null;
   const end = at + 10 + synchsafe(head, 6);
   if (end > blob.size) return null;
   const body = await bytesOf(blob, at + 10, end);
-  const kept: Bytes[] = [];
+  const frames: Id3["frames"] = [];
   let pos = 0;
   while (pos + 10 <= body.length && body[pos] !== 0) {
-    if (!/^[A-Z0-9]{4}$/.test(ascii(body, pos, 4))) return null;
+    const id = ascii(body, pos, 4);
+    if (!/^[A-Z0-9]{4}$/.test(id)) return null;
     // Old iTunes wrote v2.4 sizes unsynchsafed; a misread size fails the ID or padding checks, and the audio's start
     // comes from the tag header either way.
     if (version === 4 && !isSynchsafe(body, pos + 4)) return null;
     const next = pos + 10 + (version === 4 ? synchsafe(body, pos + 4) : uint32(body, pos + 4));
     if (next > body.length) return null;
-    if (ascii(body, pos, 4) !== "APIC") kept.push(body.subarray(pos, next));
+    frames.push({ id, bytes: body.subarray(pos, next) });
     pos = next;
   }
   // Anything after the frames must be padding, or the frames were misread.
   if (body.subarray(pos).some((x) => x !== 0)) return null;
-  const frames = concat(kept);
-  const size = frames.length;
-  head.set([(size >> 21) & 0x7f, (size >> 14) & 0x7f, (size >> 7) & 0x7f, size & 0x7f], 6);
-  return { bytes: concat([head, frames]), end };
+  return { head, version, frames, end };
 }
 
-async function flacWithoutPictures(blob: Blob, at: number): Promise<{ bytes: Bytes; end: number } | null> {
-  const kept: Bytes[] = [];
+// The tag with just these frames and no padding.
+function writeId3(tag: Id3, frames: Bytes[]): Bytes {
+  const body = concat(frames);
+  const head = tag.head.slice();
+  const size = body.length;
+  head.set([(size >> 21) & 0x7f, (size >> 14) & 0x7f, (size >> 7) & 0x7f, size & 0x7f], 6);
+  return concat([head, body]);
+}
+
+interface Flac {
+  blocks: { type: number; bytes: Bytes }[];
+  end: number;
+}
+
+async function readFlac(blob: Blob, at: number): Promise<Flac | null> {
+  const blocks: Flac["blocks"] = [];
   let pos = at + 4;
   for (let last = false; !last; ) {
     const head = await bytesOf(blob, pos, pos + 4);
@@ -70,13 +92,47 @@ async function flacWithoutPictures(blob: Blob, at: number): Promise<{ bytes: Byt
     if (type === 127 || (pos === at + 4 && type !== 0)) return null;
     const next = pos + 4 + ((head[1] << 16) | (head[2] << 8) | head[3]);
     if (next > blob.size) return null;
-    if (type !== FLAC_PICTURE && type !== FLAC_PADDING) kept.push(await bytesOf(blob, pos, next));
+    blocks.push({ type, bytes: await bytesOf(blob, pos, next) });
     pos = next;
   }
   const sync = await bytesOf(blob, pos, pos + 2);
   if (sync[0] !== 0xff || (sync[1] & 0xfe) !== 0xf8) return null;
-  kept.forEach((block, i) => (block[0] = (block[0] & 0x7f) | (i === kept.length - 1 ? 0x80 : 0)));
-  return { bytes: concat([new TextEncoder().encode("fLaC"), ...kept]), end: pos };
+  return { blocks, end: pos };
+}
+
+// The blocks in order after the stream marker, with only the final one flagged as last.
+function writeFlac(blocks: Bytes[]): Bytes {
+  const out = blocks.map((b) => b.slice());
+  out.forEach((block, i) => (block[0] = (block[0] & 0x7f) | (i === out.length - 1 ? 0x80 : 0)));
+  return concat([new Uint8Array(text("fLaC")), ...out]);
+}
+
+interface Tags {
+  id3: Id3[];
+  flac: Flac | null;
+  // Where the audio starts.
+  audio: number;
+}
+
+// The ID3 tags at the start, then either FLAC metadata or the first MPEG frame. Null for anything else.
+async function readTags(blob: Blob): Promise<Tags | null> {
+  const id3: Id3[] = [];
+  let at = 0;
+  let magic = await bytesOf(blob, 0, 4);
+  while (ascii(magic, 0, 3) === "ID3") {
+    const tag = await readId3(blob, at);
+    if (!tag) return null;
+    id3.push(tag);
+    at = tag.end;
+    magic = await bytesOf(blob, at, at + 4);
+  }
+  if (ascii(magic, 0, 4) === "fLaC") {
+    const flac = await readFlac(blob, at);
+    return flac && { id3, flac, audio: flac.end };
+  }
+  // Not an MPEG frame right after the tags, so the tag size can't be trusted.
+  if (magic[0] !== 0xff || (magic[1] & 0xe0) !== 0xe0) return null;
+  return { id3, flac: null, audio: at };
 }
 
 interface Box {
@@ -135,9 +191,14 @@ function metaChildren(b: Bytes, meta: Box): Box[] | null {
   return null;
 }
 
+interface Table {
+  box: Box;
+  wide: boolean;
+}
+
 // Chunk offset tables of every track, or null if any track's can't be found.
-function chunkTables(b: Bytes, moovChildren: Box[]): { box: Box; wide: boolean }[] | null {
-  const tables: { box: Box; wide: boolean }[] = [];
+function chunkTables(b: Bytes, moovChildren: Box[]): Table[] | null {
+  const tables: Table[] = [];
   for (const trak of moovChildren.filter((x) => x.type === "trak")) {
     const mdia = only(boxesIn(b, trak.body, trak.end), "mdia");
     const minf = mdia && only(boxesIn(b, mdia.body, mdia.end), "minf");
@@ -156,7 +217,7 @@ function chunkTables(b: Bytes, moovChildren: Box[]): { box: Box; wide: boolean }
   return tables.length ? tables : null;
 }
 
-function readOffsets(b: Bytes, { box, wide }: { box: Box; wide: boolean }): number[] {
+function readOffsets(b: Bytes, { box, wide }: Table): number[] {
   const count = uint32(b, box.body + 4);
   return Array.from({ length: count }, (_, i) =>
     wide
@@ -165,7 +226,7 @@ function readOffsets(b: Bytes, { box, wide }: { box: Box; wide: boolean }): numb
   );
 }
 
-function writeOffsets(b: Bytes, { box, wide }: { box: Box; wide: boolean }, offsets: number[]): void {
+function writeOffsets(b: Bytes, { box, wide }: Table, offsets: number[]): void {
   const view = new DataView(b.buffer, b.byteOffset, b.byteLength);
   offsets.forEach((n, i) => {
     if (wide) {
@@ -175,88 +236,216 @@ function writeOffsets(b: Bytes, { box, wide }: { box: Box; wide: boolean }, offs
   });
 }
 
-// Removes moov/udta/meta/ilst/covr. When moov sits before the audio, every chunk offset after it moves back by the
-// bytes removed. Fragmented and encrypted files, and anything not laid out as expected, give null.
-async function mp4WithoutCovers(blob: Blob): Promise<Blob | null> {
+interface Mp4 {
+  moovBox: Box;
+  // moov's own bytes, which are edited in place.
+  moov: Bytes;
+  children: Box[];
+  tables: Table[];
+  offsets: number[][];
+}
+
+// Fragmented and encrypted files, and anything not laid out as expected, give null.
+async function readMp4(blob: Blob): Promise<Mp4 | null> {
   const top = await topLevel(blob);
   if (!top || top[0]?.type !== "ftyp" || top.some((x) => ["moof", "sidx", "mfra"].includes(x.type))) return null;
   const moovBox = only(top, "moov");
   if (!moovBox || moovBox.body !== moovBox.start + 8) return null;
   const moov = await bytesOf(blob, moovBox.start, moovBox.end);
-  const moovChildren = boxesIn(moov, 8, moov.length);
-  if (!moovChildren || moovChildren.some((x) => x.type === "mvex")) return null;
-  const udta = only(moovChildren, "udta");
-  const meta = udta && only(boxesIn(moov, udta.body, udta.end), "meta");
-  const metaList = meta && metaChildren(moov, meta);
-  const ilst = only(metaList, "ilst");
-  const ilstChildren = ilst && boxesIn(moov, ilst.body, ilst.end);
-  const covers = ilstChildren?.filter((x) => x.type === "covr") ?? [];
-  if (!udta || !meta || !ilst || covers.length === 0) return null;
-  const removed = covers.reduce((n, c) => n + c.end - c.start, 0);
-
-  const tables = chunkTables(moov, moovChildren);
+  const children = boxesIn(moov, 8, moov.length);
+  if (!children || children.some((x) => x.type === "mvex")) return null;
+  const tables = chunkTables(moov, children);
   if (!tables) return null;
-  const before = tables.map((t) => readOffsets(moov, t));
-  const after = before.map((list) => list.map((n) => (n >= moovBox.end ? n - removed : n)));
+  const offsets = tables.map((t) => readOffsets(moov, t));
   // An offset into moov itself, or one past the end, means the table isn't what it seems.
-  if (before.flat().some((n) => (n >= moovBox.start && n < moovBox.end) || n >= blob.size)) return null;
+  if (offsets.flat().some((n) => (n >= moovBox.start && n < moovBox.end) || n >= blob.size)) return null;
+  return { moovBox, moov, children, tables, offsets };
+}
+
+// Swaps moov for edit's result. When moov sits before the audio, every chunk offset after it moves by the change in
+// moov's size. Then proves the offsets line up: each track's first and last chunk must start with the same bytes as
+// before, which suffices only because every offset moves by the same amount.
+async function replaceMoov(blob: Blob, mp4: Mp4, delta: number, edit: (moov: Bytes) => Bytes): Promise<Blob | null> {
+  const { moovBox, moov, tables, offsets } = mp4;
+  const after = offsets.map((list) => list.map((n) => (n >= moovBox.end ? n + delta : n)));
   tables.forEach((t, i) => writeOffsets(moov, t, after[i]));
-
-  const view = new DataView(moov.buffer);
-  for (const box of [{ start: 0 }, udta, meta, ilst]) view.setUint32(box.start, uint32(moov, box.start) - removed);
-  const kept: Bytes[] = [];
-  let at = 0;
-  for (const c of covers) {
-    kept.push(moov.subarray(at, c.start));
-    at = c.end;
-  }
-  kept.push(moov.subarray(at));
-  const slim = new Blob([blob.slice(0, moovBox.start), concat(kept), blob.slice(moovBox.end)], { type: blob.type });
-
-  // Proof the offsets line up: each track's first and last chunk must start with the same bytes as before. The ends
-  // suffice only because every offset after moov moves by the same amount. A chunk just before moov is compared up
-  // to it.
-  for (const [i, list] of before.entries()) {
+  const edited = edit(moov);
+  if (edited.length !== moov.length + delta) return null;
+  const out = new Blob([blob.slice(0, moovBox.start), edited, blob.slice(moovBox.end)], { type: blob.type });
+  for (const [i, list] of offsets.entries()) {
     for (const j of list.length ? new Set([0, list.length - 1]) : []) {
+      // A chunk just before moov is compared only up to it, as moov's own bytes have changed.
       const length = Math.min(32, list[j] < moovBox.start ? moovBox.start - list[j] : 32);
       const was = await bytesOf(blob, list[j], list[j] + length);
-      const now = await bytesOf(slim, after[i][j], after[i][j] + length);
+      const now = await bytesOf(out, after[i][j], after[i][j] + length);
       if (was.length === 0 || was.some((x, k) => x !== now[k]) || was.length !== now.length) return null;
     }
   }
-  return slim;
+  return out;
+}
+
+const growBoxes = (moov: Bytes, boxes: { start: number }[], by: number) => {
+  const view = new DataView(moov.buffer, moov.byteOffset, moov.byteLength);
+  for (const box of boxes) view.setUint32(box.start, uint32(moov, box.start) + by);
+};
+
+// Removes moov/udta/meta/ilst/covr.
+async function mp4WithoutCovers(blob: Blob): Promise<Blob | null> {
+  const mp4 = await readMp4(blob);
+  if (!mp4) return null;
+  const { moov, children } = mp4;
+  const udta = only(children, "udta");
+  const meta = udta && only(boxesIn(moov, udta.body, udta.end), "meta");
+  const ilst = meta && only(metaChildren(moov, meta), "ilst");
+  const covers = (ilst && boxesIn(moov, ilst.body, ilst.end)?.filter((x) => x.type === "covr")) || [];
+  if (!udta || !meta || !ilst || covers.length === 0) return null;
+  const removed = covers.reduce((n, c) => n + c.end - c.start, 0);
+  return replaceMoov(blob, mp4, -removed, (bytes) => {
+    growBoxes(bytes, [{ start: 0 }, udta, meta, ilst], -removed);
+    const kept: Bytes[] = [];
+    let at = 0;
+    for (const c of covers) {
+      kept.push(bytes.subarray(at, c.start));
+      at = c.end;
+    }
+    kept.push(bytes.subarray(at));
+    return concat(kept);
+  });
+}
+
+interface Picture {
+  mime: "image/jpeg" | "image/png";
+  data: Bytes;
+  width: number;
+  height: number;
+}
+
+// The size from the first frame header; 0 by 0 when it can't be found, which readers accept.
+function jpegSize(b: Bytes): [number, number] {
+  for (let i = 2; i + 9 < b.length && b[i] === 0xff; ) {
+    const marker = b[i + 1];
+    if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) {
+      return [(b[i + 7] << 8) | b[i + 8], (b[i + 5] << 8) | b[i + 6]];
+    }
+    i += 2 + ((b[i + 2] << 8) | b[i + 3]);
+  }
+  return [0, 0];
+}
+
+async function pictureOf(art: Blob): Promise<Picture | null> {
+  const data = new Uint8Array(await art.arrayBuffer());
+  if (data[0] === 0xff && data[1] === 0xd8) {
+    const [width, height] = jpegSize(data);
+    return { mime: "image/jpeg", data, width, height };
+  }
+  if (ascii(data, 1, 3) === "PNG") return { mime: "image/png", data, width: uint32(data, 16), height: uint32(data, 20) };
+  return null;
+}
+
+function box(type: string, ...parts: (Bytes | number[])[]): Bytes {
+  const body = concat(parts.map((p) => (p instanceof Uint8Array ? p : new Uint8Array(p))));
+  return concat([new Uint8Array([...u32(body.length + 8), ...text(type)]), body]);
+}
+
+// Adds moov/udta/meta/ilst/covr, making whichever of udta, meta and ilst is missing.
+async function mp4WithCover(blob: Blob, picture: Picture): Promise<Blob | null> {
+  const mp4 = await readMp4(blob);
+  if (!mp4) return null;
+  const { moov, children } = mp4;
+  let added = box("covr", box("data", u32(picture.mime === "image/png" ? 14 : 13), u32(0), picture.data));
+  const parents: Box[] = [];
+  const wrap = () => {
+    added = box("ilst", added);
+    const hdlr = box("hdlr", u32(0), u32(0), text("mdir"), text("appl"), new Array(8).fill(0), [0]);
+    added = box("meta", u32(0), hdlr, added);
+  };
+  const udtas = children.filter((x) => x.type === "udta");
+  const udta = only(children, "udta");
+  if (udtas.length > 1) return null;
+  if (!udta) {
+    wrap();
+    added = box("udta", added);
+  } else {
+    const inUdta = boxesIn(moov, udta.body, udta.end);
+    if (!inUdta || inUdta.filter((x) => x.type === "meta").length > 1) return null;
+    const meta = only(inUdta, "meta");
+    parents.push(udta);
+    if (!meta) wrap();
+    else {
+      const inMeta = metaChildren(moov, meta);
+      const ilst = only(inMeta, "ilst");
+      const inIlst = ilst && boxesIn(moov, ilst.body, ilst.end);
+      if (!ilst || !inIlst || inIlst.some((x) => x.type === "covr")) return null;
+      parents.push(meta, ilst);
+    }
+  }
+  const at = parents.at(-1)?.end ?? moov.length;
+  return replaceMoov(blob, mp4, added.length, (bytes) => {
+    growBoxes(bytes, [{ start: 0 }, ...parents], added.length);
+    return concat([bytes.subarray(0, at), added, bytes.subarray(at)]);
+  });
+}
+
+function apicFrame(picture: Picture, version: number): Bytes {
+  const body = [0, ...text(picture.mime), 0, 3, 0];
+  const size = body.length + picture.data.length;
+  const sizeBytes = version === 4 ? [(size >> 21) & 0x7f, (size >> 14) & 0x7f, (size >> 7) & 0x7f, size & 0x7f] : u32(size);
+  return concat([new Uint8Array([...text("APIC"), ...sizeBytes, 0, 0, ...body]), picture.data]);
+}
+
+function pictureBlock(picture: Picture): Bytes {
+  const body = concat([
+    new Uint8Array([...u32(3), ...u32(picture.mime.length), ...text(picture.mime), ...u32(0)]),
+    new Uint8Array([...u32(picture.width), ...u32(picture.height), ...u32(24), ...u32(0), ...u32(picture.data.length)]),
+    picture.data,
+  ]);
+  const n = body.length;
+  return concat([new Uint8Array([FLAC_PICTURE, (n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff]), body]);
 }
 
 // The song without its embedded cover pictures (and tag padding in MP3 and FLAC), or null when that saves little or
 // the file isn't an MP3, FLAC or MP4 this can read for certain. The audio bytes are copied as they are.
 export async function slimAudio(blob: Blob): Promise<Blob | null> {
   try {
-    let magic = await bytesOf(blob, 0, 8);
-    if (ascii(magic, 4, 4) === "ftyp") {
+    if (ascii(await bytesOf(blob, 4, 8), 0, 4) === "ftyp") {
       const slim = await mp4WithoutCovers(blob);
       return slim && blob.size - slim.size >= MIN_SAVING ? slim : null;
     }
-    const parts: Bytes[] = [];
-    let at = 0;
-    while (ascii(magic, 0, 3) === "ID3") {
-      const tag = await id3WithoutPictures(blob, at);
-      if (!tag) return null;
-      parts.push(tag.bytes);
-      at = tag.end;
-      magic = await bytesOf(blob, at, at + 4);
-    }
-    if (ascii(magic, 0, 4) === "fLaC") {
-      const meta = await flacWithoutPictures(blob, at);
-      if (!meta) return null;
-      parts.push(meta.bytes);
-      at = meta.end;
-    } else if (magic[0] !== 0xff || (magic[1] & 0xe0) !== 0xe0) {
-      // Not an MPEG frame right after the tags, so the tag size can't be trusted.
-      return null;
+    const tags = await readTags(blob);
+    if (!tags) return null;
+    const parts = tags.id3.map((t) => writeId3(t, t.frames.filter((f) => f.id !== "APIC").map((f) => f.bytes)));
+    if (tags.flac) {
+      parts.push(writeFlac(tags.flac.blocks.filter((b) => b.type !== FLAC_PICTURE && b.type !== FLAC_PADDING).map((b) => b.bytes)));
     }
     const head = parts.reduce((n, p) => n + p.length, 0);
-    if (at - head < MIN_SAVING) return null;
-    return new Blob([...parts, blob.slice(at)], { type: blob.type });
+    if (tags.audio - head < MIN_SAVING) return null;
+    return new Blob([...parts, blob.slice(tags.audio)], { type: blob.type });
+  } catch {
+    return null;
+  }
+}
+
+// The song with art embedded as its cover, for a copy that leaves the app. Null when it already has a cover, or isn't
+// an MP3, FLAC or MP4 this can write for certain; the audio bytes are copied as they are.
+export async function withCoverArt(blob: Blob, art: Blob): Promise<Blob | null> {
+  try {
+    const picture = await pictureOf(art);
+    if (!picture) return null;
+    if (ascii(await bytesOf(blob, 4, 8), 0, 4) === "ftyp") return await mp4WithCover(blob, picture);
+    const tags = await readTags(blob);
+    if (!tags || tags.id3.some((t) => t.frames.some((f) => f.id === "APIC"))) return null;
+    const id3 = tags.id3.map((t) => writeId3(t, t.frames.map((f) => f.bytes)));
+    let parts: Bytes[];
+    if (tags.flac) {
+      const blocks = tags.flac.blocks;
+      if (blocks.some((b) => b.type === FLAC_PICTURE)) return null;
+      parts = [...id3, writeFlac([...blocks.map((b) => b.bytes), pictureBlock(picture)])];
+    } else {
+      const [first] = tags.id3;
+      const tag: Id3 = first ?? { head: new Uint8Array([...text("ID3"), 3, 0, 0, 0, 0, 0, 0]), version: 3, frames: [], end: 0 };
+      parts = [writeId3(tag, [...tag.frames.map((f) => f.bytes), apicFrame(picture, tag.version)]), ...id3.slice(1)];
+    }
+    return new Blob([...parts, blob.slice(tags.audio)], { type: blob.type });
   } catch {
     return null;
   }

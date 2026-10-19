@@ -792,7 +792,7 @@ export async function storedFile(id: string): Promise<Blob | undefined> {
 
 const artUrls = new Map<string, Promise<string | null>>();
 
-const artBlob = async (artId: string) => sessionArt.get(artId) ?? get<Blob>("art", artId);
+export const artBlob = async (artId: string) => sessionArt.get(artId) ?? get<Blob>("art", artId);
 
 export function artUrl(artId: string): Promise<string | null> {
   let url = artUrls.get(artId);

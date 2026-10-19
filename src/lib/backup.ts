@@ -75,7 +75,7 @@ function currentHistory(): History {
   return { plays: getPlays(), removed: getRemovedSongs() };
 }
 
-function withNumber(name: string, n: number): string {
+export function withNumber(name: string, n: number): string {
   const dot = name.lastIndexOf(".");
   return dot > 0 ? `${name.slice(0, dot)} (${n})${name.slice(dot)}` : `${name} (${n})`;
 }
@@ -287,7 +287,7 @@ async function sameBytes(a: Blob, b: Blob): Promise<boolean> {
 }
 
 // Never overwrites. A matching file already there is left as it is; anything else gets the next free number.
-async function writeNew(
+export async function writeNew(
   dir: FileSystemDirectoryHandle,
   name: string,
   data: Blob,

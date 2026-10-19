@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { slimAudio } from "./slim";
+import { slimAudio, withCoverArt } from "./slim";
 import { freshEnvironment, makeTrack } from "./testing";
 
 const BIG = 40 * 1024;
@@ -107,17 +107,18 @@ interface Mp4Options {
   quickTimeMeta?: boolean;
   cover?: boolean;
   extra?: B;
+  udta?: boolean;
 }
 
 // ftyp, then moov and mdat in either order, with each track's chunk offsets pointing into mdat.
-function mp4({ moovFirst = true, wide = false, quickTimeMeta = false, cover = true, extra = new Uint8Array() }: Mp4Options = {}) {
+function mp4({ moovFirst = true, wide = false, quickTimeMeta = false, cover = true, extra = new Uint8Array(), udta = true }: Mp4Options = {}) {
   const ftyp = box("ftyp", enc("M4A "), new Uint8Array(4));
   const mdat = box("mdat", SAMPLES);
   const tags = box("ilst", box("\xa9nam", full("data", enc("Song"))), ...(cover ? [box("covr", full("data", new Uint8Array(BIG).fill(9)))] : []));
   const hdlr = full("hdlr", enc("....mdirappl"));
   const meta = quickTimeMeta ? box("meta", hdlr, tags) : full("meta", hdlr, tags);
   const build = (offsets: number[]) =>
-    box("moov", box("mvhd", new Uint8Array(4)), box("trak", box("mdia", box("minf", box("stbl", chunks(offsets, wide), extra)))), box("udta", meta));
+    box("moov", box("mvhd", new Uint8Array(4)), box("trak", box("mdia", box("minf", box("stbl", chunks(offsets, wide), extra)))), ...(udta ? [box("udta", meta)] : []));
   const size = build([0, 0]).length;
   const mdatAt = ftyp.length + (moovFirst ? size : 0);
   const moov = build([mdatAt + 8, mdatAt + 24]);
@@ -172,6 +173,62 @@ describe("slimAudio on MP4", () => {
       new Blob([mp4(), enc("junk")]),
     ];
     for (const blob of cases) expect(await slimAudio(blob)).toBeNull();
+  });
+});
+
+// A JPEG's start: the image marker, then a frame header saying 100 high by 200 wide.
+const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xc0, 0, 17, 8, 0, 100, 0, 200, ...new Array(64).fill(5)]);
+const art = new Blob([JPEG], { type: "image/jpeg" });
+const has = (b: Uint8Array, part: Uint8Array) => {
+  outer: for (let i = 0; i + part.length <= b.length; i++) {
+    for (let j = 0; j < part.length; j++) if (b[i + j] !== part[j]) continue outer;
+    return true;
+  }
+  return false;
+};
+
+describe("withCoverArt", () => {
+  it("adds the cover to an MP3's tag, keeping its other frames and the audio", async () => {
+    for (const v of [3, 4] as const) {
+      const out = await bytes((await withCoverArt(new Blob([id3([title(v)], v, 512), AUDIO]), art))!);
+      const apic = frame("APIC", new Uint8Array([0, ...enc("image/jpeg"), 0, 3, 0, ...JPEG]), v);
+      expect(out).toEqual(new Uint8Array([...id3([title(v), apic], v), ...AUDIO]));
+    }
+  });
+
+  it("gives an MP3 with no tag a new one", async () => {
+    const out = await bytes((await withCoverArt(new Blob([AUDIO]), art))!);
+    const apic = frame("APIC", new Uint8Array([0, ...enc("image/jpeg"), 0, 3, 0, ...JPEG]), 3);
+    expect(out).toEqual(new Uint8Array([...id3([apic]), ...AUDIO]));
+  });
+
+  it("adds a picture block to a FLAC, with the image's size, as the new last block", async () => {
+    const out = await bytes((await withCoverArt(new Blob([enc("fLaC"), flacBlock(0, streamInfo, false), flacBlock(4, comment, true), FLAC_AUDIO]), art))!);
+    const picture = new Uint8Array([...be(3, 4), ...be(10, 4), ...enc("image/jpeg"), ...be(0, 4), ...be(200, 4), ...be(100, 4), ...be(24, 4), ...be(0, 4), ...be(JPEG.length, 4), ...JPEG]);
+    expect(out).toEqual(new Uint8Array([...enc("fLaC"), ...flacBlock(0, streamInfo, false), ...flacBlock(4, comment, false), ...flacBlock(6, picture, true), ...FLAC_AUDIO]));
+  });
+
+  it("adds the cover to an MP4 and moves the chunk offsets to match, making the tag boxes when there are none", async () => {
+    for (const options of [{}, { wide: true }, { moovFirst: false }, { udta: false }, { quickTimeMeta: true }]) {
+      const out = (await withCoverArt(mp4({ ...options, cover: false }), art))!;
+      expect(await chunksOf(out)).toEqual(["first chunk.", "second chunk"]);
+      const b = await bytes(out);
+      expect(has(b, new Uint8Array([...enc("covr"), ...be(JPEG.length + 16, 4), ...enc("data"), ...be(13, 4), ...be(0, 4), ...JPEG]))).toBe(true);
+    }
+  });
+
+  it("won't add a second cover to a song it has already covered", async () => {
+    const original = mp4({ cover: false });
+    const withArt = (await withCoverArt(original, art))!;
+    expect(await bytes((await withCoverArt(withArt, art)) ?? new Blob())).toEqual(new Uint8Array());
+    expect(await chunksOf(withArt)).toEqual(["first chunk.", "second chunk"]);
+  });
+
+  it("leaves songs that already have a cover, and art it can't embed, alone", async () => {
+    expect(await withCoverArt(new Blob([id3([title(), picture()]), AUDIO]), art)).toBeNull();
+    expect(await withCoverArt(new Blob([enc("fLaC"), flacBlock(0, streamInfo, false), flacBlock(6, new Uint8Array(8), true), FLAC_AUDIO]), art)).toBeNull();
+    expect(await withCoverArt(mp4(), art)).toBeNull();
+    expect(await withCoverArt(new Blob([AUDIO]), new Blob([enc("GIF89a")]))).toBeNull();
   });
 });
 
