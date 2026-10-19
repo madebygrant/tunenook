@@ -289,16 +289,21 @@ const growBoxes = (moov: Bytes, boxes: { start: number }[], by: number) => {
   for (const box of boxes) view.setUint32(box.start, uint32(moov, box.start) + by);
 };
 
-// Removes moov/udta/meta/ilst/covr.
-async function mp4WithoutCovers(blob: Blob): Promise<Blob | null> {
-  const mp4 = await readMp4(blob);
-  if (!mp4) return null;
-  const { moov, children } = mp4;
+// moov/udta/meta/ilst/covr and the boxes that hold them, or null when there's no cover there.
+function mp4Covers({ moov, children }: Mp4) {
   const udta = only(children, "udta");
   const meta = udta && only(boxesIn(moov, udta.body, udta.end), "meta");
   const ilst = meta && only(metaChildren(moov, meta), "ilst");
   const covers = (ilst && boxesIn(moov, ilst.body, ilst.end)?.filter((x) => x.type === "covr")) || [];
-  if (!udta || !meta || !ilst || covers.length === 0) return null;
+  return udta && meta && ilst && covers.length ? { udta, meta, ilst, covers } : null;
+}
+
+// Removes moov/udta/meta/ilst/covr.
+async function mp4WithoutCovers(blob: Blob): Promise<Blob | null> {
+  const mp4 = await readMp4(blob);
+  const found = mp4 && mp4Covers(mp4);
+  if (!mp4 || !found) return null;
+  const { udta, meta, ilst, covers } = found;
   const removed = covers.reduce((n, c) => n + c.end - c.start, 0);
   return replaceMoov(blob, mp4, -removed, (bytes) => {
     growBoxes(bytes, [{ start: 0 }, udta, meta, ilst], -removed);
@@ -422,6 +427,21 @@ export async function slimAudio(blob: Blob): Promise<Blob | null> {
     return new Blob([...parts, blob.slice(tags.audio)], { type: blob.type });
   } catch {
     return null;
+  }
+}
+
+// Whether the song already carries a cover in a place this reads.
+export async function hasCoverArt(blob: Blob): Promise<boolean> {
+  try {
+    if (ascii(await bytesOf(blob, 4, 8), 0, 4) === "ftyp") {
+      const mp4 = await readMp4(blob);
+      return mp4 !== null && mp4Covers(mp4) !== null;
+    }
+    const tags = await readTags(blob);
+    if (!tags) return false;
+    return tags.id3.some((t) => t.frames.some((f) => f.id === "APIC")) || (tags.flac?.blocks.some((b) => b.type === FLAC_PICTURE) ?? false);
+  } catch {
+    return false;
   }
 }
 

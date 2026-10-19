@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { canShareFiles, downloadFiles, prepareExport, saveToFolder, shareFiles, type PreparedExport } from "../lib/exportSongs";
+import { canShareFiles, downloadFiles, PartialSaveError, prepareExport, saveToFolder, shareFiles, type PreparedExport } from "../lib/exportSongs";
 import { canLinkFolders } from "../lib/folders";
 import { isIOS } from "../lib/standalone";
 import { formatBytes, plural } from "../lib/format";
@@ -35,30 +35,31 @@ export function ExportSongs({ ids, onDone }: { ids: string[]; onDone: (message: 
     );
   }
   if (!ready) {
+    const total = new Set(ids).size;
+    // The count changes for every song, so it stays out of the status a screen reader announces.
     return (
-      <p className="muted" role="status">
-        Getting {done} of {plural(ids.length, "song")} ready…
+      <p className="muted">
+        <span role="status">Getting {plural(total, "song")} ready…</span>{" "}
+        <span className="mono" aria-hidden="true">
+          {done} of {total}
+        </span>
       </p>
     );
   }
 
-  const { files, linked, unreadable } = ready;
+  const { files, linked, unreadable, uncovered } = ready;
   const count = plural(files.length, "song");
   const bytes = files.reduce((n, f) => n + f.size, 0);
   const share = canShareFiles(files);
 
-  async function act(run: () => Promise<string | null>) {
+  async function act(run: () => Promise<string | null>, failure: (e: unknown) => string) {
     setBusy(true);
     setError(null);
     try {
       const message = await run();
       if (message) onDone(message);
-    } catch {
-      setError(
-        share
-          ? "Couldn't share these songs. Try fewer at a time, or download them instead."
-          : "Couldn't save these songs. Check there's space and try again.",
-      );
+    } catch (e) {
+      setError(failure(e));
     } finally {
       setBusy(false);
     }
@@ -82,6 +83,12 @@ export function ExportSongs({ ids, onDone }: { ids: string[]; onDone: (message: 
           {linked.length === 1 ? "it's" : "they're"} already a file on this device.
         </p>
       )}
+      {uncovered.length > 0 && (
+        <p>
+          {plural(uncovered.length, "song")} will go without {uncovered.length === 1 ? "its" : "their"} cover, as{" "}
+          {uncovered.length === 1 ? "its file is" : "their files are"} laid out in a way TuneNook can't add one to.
+        </p>
+      )}
       {files.length > 0 && unreadable.length > 0 && (
         <p>
           {plural(unreadable.length, "song")} couldn't be read, so {unreadable.length === 1 ? "it isn't" : "they aren't"}{" "}
@@ -91,7 +98,16 @@ export function ExportSongs({ ids, onDone }: { ids: string[]; onDone: (message: 
       {files.length > 0 && (
         <div className="dialog-actions">
           {share && (
-            <Button icon={<ShareIcon />} disabled={busy} onClick={() => void act(async () => ((await shareFiles(files)) ? `Shared ${count}.` : null))}>
+            <Button
+              icon={<ShareIcon />}
+              disabled={busy}
+              onClick={() =>
+                void act(
+                  async () => ((await shareFiles(files)) ? `Shared ${count}.` : null),
+                  () => "Couldn't share these songs. Try fewer at a time, or save them another way.",
+                )
+              }
+            >
               Share…
             </Button>
           )}
@@ -100,7 +116,15 @@ export function ExportSongs({ ids, onDone }: { ids: string[]; onDone: (message: 
               variant="secondary"
               icon={<FolderIcon />}
               disabled={busy}
-              onClick={() => void act(async () => ((await saveToFolder(files)) === null ? null : `Saved ${count} to the folder.`))}
+              onClick={() =>
+                void act(
+                  async () => ((await saveToFolder(files)) === null ? null : `Saved ${count} to the folder.`),
+                  (e) =>
+                    e instanceof PartialSaveError && e.written > 0
+                      ? `Saved ${e.written} of ${files.length} before it stopped. Check there's space and save again to the same folder to finish.`
+                      : "Couldn't save these songs. Check there's space and try again.",
+                )
+              }
             >
               Save to a folder
             </Button>
@@ -109,10 +133,15 @@ export function ExportSongs({ ids, onDone }: { ids: string[]; onDone: (message: 
               variant="secondary"
               icon={<DownloadIcon />}
               disabled={busy}
-              onClick={() => void act(async () => {
-                await downloadFiles(files);
-                return `Downloading ${count}.`;
-              })}
+              onClick={() =>
+                void act(
+                  async () => {
+                    await downloadFiles(files);
+                    return `Downloading ${count}.`;
+                  },
+                  () => "Couldn't download these songs. Try again.",
+                )
+              }
             >
               Download
             </Button>

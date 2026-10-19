@@ -55,6 +55,70 @@ describe("prepareExport", () => {
   });
 });
 
+describe("prepareExport, other cases", () => {
+  it("exports a song that appears twice in a playlist once", async () => {
+    const { exporter, add } = await setup();
+    await add("a", { fileName: "Intro.mp3" });
+    const { files } = await exporter.prepareExport(["a", "a"]);
+    expect(files.map((f) => f.name)).toEqual(["Intro.mp3"]);
+  });
+
+  it("notes songs whose file can't take their saved cover, but not ones that already have their own", async () => {
+    const { exporter, library } = await setup();
+    const files: Record<string, Blob> = {
+      odd: new Blob([new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8])]),
+      own: new Blob([new Uint8Array([...new TextEncoder().encode("ID3"), 3, 0, 0, 0, 0, 0, 17, ...new TextEncoder().encode("APIC"), 0, 0, 0, 7, 0, 0, 0, 1, 2, 3, 4, 5, 6]), AUDIO]),
+    };
+    vi.mocked(library.storedFile).mockImplementation(async (id) => files[id]);
+    await library.addTrack({ track: makeTrack("odd", { artId: "art:x" }) });
+    await library.addTrack({ track: makeTrack("own", { artId: "art:x" }) });
+    const { files: out, uncovered } = await exporter.prepareExport(["odd", "own"]);
+    expect(out).toHaveLength(2);
+    expect(uncovered.map((t) => t.id)).toEqual(["odd"]);
+  });
+});
+
+describe("saveToFolder", () => {
+  // A folder whose writes fail once it holds limit files, like a disk filling up.
+  function folder(limit: number) {
+    const stored = new Map<string, File>();
+    const dir = {
+      getFileHandle: async (name: string, options?: { create?: boolean }) => {
+        if (!stored.has(name) && !options?.create) throw new DOMException("missing", "NotFoundError");
+        return {
+          getFile: async () => stored.get(name)!,
+          createWritable: async () => ({
+            write: async (data: Blob) => {
+              if (stored.size >= limit) throw new DOMException("full", "QuotaExceededError");
+              stored.set(name, new File([data], name));
+            },
+            close: async () => {},
+            abort: async () => {},
+          }),
+        };
+      },
+      removeEntry: async (name: string) => void stored.delete(name),
+    };
+    return { dir, stored };
+  }
+
+  it("says how many it saved when it stops partway, and finishes on a second save without copies", async () => {
+    const { exporter } = await setup();
+    const files = ["a.mp3", "b.mp3", "c.mp3"].map((n) => new File([n], n));
+    const { dir, stored } = folder(2);
+    Object.assign(window, { showDirectoryPicker: async () => dir });
+    const error = await exporter.saveToFolder(files).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(exporter.PartialSaveError);
+    expect((error as InstanceType<typeof exporter.PartialSaveError>).written).toBe(2);
+    expect([...stored.keys()]).toEqual(["a.mp3", "b.mp3"]);
+    const roomier = folder(10);
+    for (const [name, file] of stored) roomier.stored.set(name, file);
+    Object.assign(window, { showDirectoryPicker: async () => roomier.dir });
+    await expect(exporter.saveToFolder(files)).resolves.toBe(3);
+    expect([...roomier.stored.keys()]).toEqual(["a.mp3", "b.mp3", "c.mp3"]);
+  });
+});
+
 describe("sharing", () => {
   it("isn't offered where the browser can't share files", async () => {
     const { exporter } = await setup();

@@ -282,7 +282,7 @@ async function existing(dir: FileSystemDirectoryHandle, name: string): Promise<F
 }
 
 // The same test the importer uses for a renamed copy, without reading the whole file back.
-async function sameBytes(a: Blob, b: Blob): Promise<boolean> {
+export async function sameBytes(a: Blob, b: Blob): Promise<boolean> {
   return a.size === b.size && (await contentKey(a)) === (await contentKey(b));
 }
 

@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { slimAudio, withCoverArt } from "./slim";
+import { hasCoverArt, slimAudio, withCoverArt } from "./slim";
 import { freshEnvironment, makeTrack } from "./testing";
 
 const BIG = 40 * 1024;
@@ -229,6 +229,19 @@ describe("withCoverArt", () => {
     expect(await withCoverArt(new Blob([enc("fLaC"), flacBlock(0, streamInfo, false), flacBlock(6, new Uint8Array(8), true), FLAC_AUDIO]), art)).toBeNull();
     expect(await withCoverArt(mp4(), art)).toBeNull();
     expect(await withCoverArt(new Blob([AUDIO]), new Blob([enc("GIF89a")]))).toBeNull();
+  });
+});
+
+describe("hasCoverArt", () => {
+  it("finds a cover in each format, and none once slimmed", async () => {
+    const mp3 = new Blob([id3([title(), picture()]), AUDIO]);
+    const flac = new Blob([enc("fLaC"), flacBlock(0, streamInfo, false), flacBlock(6, new Uint8Array(8), true), FLAC_AUDIO]);
+    for (const song of [mp3, flac, mp4()]) {
+      expect(await hasCoverArt(song)).toBe(true);
+    }
+    expect(await hasCoverArt((await slimAudio(mp3))!)).toBe(false);
+    expect(await hasCoverArt((await slimAudio(mp4()))!)).toBe(false);
+    expect(await hasCoverArt(new Blob([enc("not audio")]))).toBe(false);
   });
 });
 

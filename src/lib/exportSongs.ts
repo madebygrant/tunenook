@@ -1,7 +1,7 @@
-import { withNumber, writeNew } from "./backup";
+import { sameBytes, withNumber, writeNew } from "./backup";
 import { download, safeFileName } from "./download";
 import { artBlob, getTrack, storedFile } from "./library";
-import { withCoverArt } from "./slim";
+import { hasCoverArt, withCoverArt } from "./slim";
 import type { Track } from "./types";
 
 export interface PreparedExport {
@@ -10,16 +10,29 @@ export interface PreparedExport {
   linked: Track[];
   // Songs whose stored copy couldn't be read.
   unreadable: Track[];
+  // Songs with a saved cover that their file couldn't take, so they go without one.
+  uncovered: Track[];
 }
 
-// Each stored song as a file under its own name, with the cover TuneNook holds put back in. Names that repeat, as in
-// a playlist, get a number.
+// Thrown when a folder save stops partway, with how many files made it.
+export class PartialSaveError extends Error {
+  readonly written: number;
+  constructor(written: number) {
+    super(`Saved ${written} files before stopping`);
+    this.written = written;
+  }
+}
+
+// Each stored song once, as a file under its own name, with the cover TuneNook holds put back in. Different songs
+// with the same name get a number.
 export async function prepareExport(ids: string[], onProgress: (done: number) => void = () => {}): Promise<PreparedExport> {
+  const unique = [...new Set(ids)];
   const files: File[] = [];
   const linked: Track[] = [];
   const unreadable: Track[] = [];
+  const uncovered: Track[] = [];
   const taken = new Set<string>();
-  for (const [i, id] of ids.entries()) {
+  for (const [i, id] of unique.entries()) {
     onProgress(i);
     const track = getTrack(id);
     if (!track) continue;
@@ -33,14 +46,16 @@ export async function prepareExport(ids: string[], onProgress: (done: number) =>
       continue;
     }
     const art = track.artId ? await artBlob(track.artId).catch(() => undefined) : undefined;
-    const data = (art && (await withCoverArt(blob, art))) || blob;
+    const withArt = art && (await withCoverArt(blob, art));
+    if (art && !withArt && !(await hasCoverArt(blob))) uncovered.push(track);
+    const data = withArt || blob;
     let name = safeFileName(track.fileName);
     for (let n = 2; taken.has(name.toLowerCase()); n++) name = withNumber(safeFileName(track.fileName), n);
     taken.add(name.toLowerCase());
     files.push(new File([data], name, { type: track.type || blob.type }));
   }
-  onProgress(ids.length);
-  return { files, linked, unreadable };
+  onProgress(unique.length);
+  return { files, linked, unreadable, uncovered };
 }
 
 export function canShareFiles(files: File[]): boolean {
@@ -62,7 +77,8 @@ export async function shareFiles(files: File[]): Promise<boolean> {
   }
 }
 
-// Never overwrites: a name already in the folder gets the next free number. Null when no folder was picked.
+// Never overwrites: the same file already there is skipped, so saving again after a failure finishes the job, and any
+// other file under the name gets the next free number. Null when no folder was picked.
 export async function saveToFolder(files: File[]): Promise<number | null> {
   let dir: FileSystemDirectoryHandle;
   try {
@@ -70,8 +86,16 @@ export async function saveToFolder(files: File[]): Promise<number | null> {
   } catch {
     return null;
   }
-  for (const file of files) await writeNew(dir, file.name, file, async () => false);
-  return files.length;
+  let written = 0;
+  try {
+    for (const file of files) {
+      await writeNew(dir, file.name, file, (existing) => sameBytes(existing, file));
+      written++;
+    }
+  } catch {
+    throw new PartialSaveError(written);
+  }
+  return written;
 }
 
 // Spaced out, since browsers drop downloads that start together.
