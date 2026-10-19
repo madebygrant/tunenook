@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { plural } from "../lib/format";
 import { useAlbums, useArtists, usePlays, useRemovedSongs, useTrackMap, useTracks } from "../lib/library";
 import { playTracks } from "../lib/player";
@@ -110,13 +110,33 @@ export function Review({
           Review
         </h1>
       </div>
-      <div className="periods" role="group" aria-label="Period">
-        {PERIODS.map((p) => (
-          <button key={p.value} className="filter" aria-pressed={period === p.value} onClick={() => choose(p.value)}>
-            {p.label}
-          </button>
-        ))}
-      </div>
+      <fieldset className="dial">
+        <legend className="sr-only">Period</legend>
+        <div
+          className="dial-scale"
+          style={{ "--count": PERIODS.length, "--at": PERIODS.findIndex((p) => p.value === period) } as CSSProperties}
+        >
+          {/* A tick under each choice and one between each pair, like stations on a tuning scale. */}
+          <span className="dial-ticks" aria-hidden="true">
+            {Array.from({ length: PERIODS.length * 2 + 1 }, (_, i) => (
+              <span key={i} style={{ left: `${(i / (PERIODS.length * 2)) * 100}%` }} />
+            ))}
+          </span>
+          {PERIODS.map((p) => (
+            <Fragment key={p.value}>
+              <input
+                type="radio"
+                name="review-period"
+                id={`review-period-${p.value}`}
+                checked={period === p.value}
+                onChange={() => choose(p.value)}
+              />
+              <label htmlFor={`review-period-${p.value}`}>{p.label}</label>
+            </Fragment>
+          ))}
+          <span className="dial-needle" aria-hidden="true" />
+        </div>
+      </fieldset>
       {songs.total === 0 ? (
         <div className="empty">
           <h2 className="h3">{period === "all" ? "Nothing played yet" : `Nothing played in the ${heading.toLowerCase()}`}</h2>

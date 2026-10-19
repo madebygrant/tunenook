@@ -11,7 +11,9 @@ colors:
   canvas: "#0a0c12"          # page background, sidebar on desktop
   canvas-deep: "#06080c"     # dock, topbar, drawer on phone
   surface: "#121622"         # panels, placeholder art, dialogs, toast
-  surface-hover: "#181d2b"   # hovered rows
+  surface-hover: "#181d2b"   # hovered rows, latched toggles
+  key: "#1a1f2d"             # face of ink keys: toggles, transport keys
+  lip: "#2c3242"             # the lip under a key
   border: "#1b2030"          # hairlines only
   border-strong: "#65708c"   # input and outlined control edges (4.0:1)
   # Text
@@ -31,7 +33,7 @@ typography:
   mono: "'Geist Mono', ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, monospace"
 radius: 0
 spacing: [4, 8, 12, 16, 20, 24, 32, 40]
-shadow: none
+shadow: none                 # the only drop is a key's 3px lip; see Buttons
 ---
 
 # Night radio
@@ -40,7 +42,7 @@ shadow: none
 
 TuneNook is used in two places: a phone in a dim room with one thumb, and a desk with a terminal open beside it. The phone case wins. The interface should be comfortable to look at at 1am and get out of the way at a desk.
 
-Warmth comes from colour and type, not decoration. There are no gradients, shadows, glow or rounded corners. One warm lamp colour marks where you are; everything else recedes into ink.
+Warmth comes from colour and type, not decoration. There are no gradients, glow or rounded corners, and no shadows except one: buttons are keys that sit on a 3px lip, like the preset buttons on a clock radio, and sink onto it when pressed. One warm lamp colour marks where you are; everything else recedes into ink.
 
 Night radio comes from Podnook unchanged, so the two apps look like siblings.
 
@@ -53,7 +55,9 @@ Contrast is WCAG against `canvas` unless noted.
 | `canvas` | `#0a0c12` | | Page background. Ink, not black. |
 | `canvas-deep` | `#06080c` | | Dock, topbar, drawer on phone. |
 | `surface` | `#121622` | | Panels, placeholder art, dialogs, toast. No border on it. |
-| `surface-hover` | `#181d2b` | | Hovered table and log rows. |
+| `surface-hover` | `#181d2b` | | Hovered table and log rows, latched toggles. |
+| `key` | `#1a1f2d` | | Face of ink keys: shuffle, repeat and like, and the player's transport keys. |
+| `lip` | `#2c3242` | | The lip under secondary and ink keys. Primary keys sit on `lamp-deep`. |
 | `border` | `#1b2030` | 1.2 | Hairlines only. |
 | `border-strong` | `#65708c` | 4.0 (3.4 on hover rows) | Input and outlined control edges. Meets 3:1 for UI. |
 | `text` | `#ece6da` | 15.7 | Titles, body, song titles. |
@@ -79,7 +83,7 @@ Syne (400, 500) for display, Figtree (300, 400, 500) for text and Geist Mono (40
 
 | Role | Face | Size / line | Weight | Use |
 |---|---|---|---|---|
-| `display` | Syne | clamp(32px, 6vw, 48px) / 1.05, -0.03em | 400 | Page titles |
+| `display` | Syne | clamp(32px, 6vw, 48px) / 1.2, -0.03em | 400 | Page titles |
 | `h2` | Syne | 22px / 1.3 | 400 | Section headings |
 | `title` | Sans | 16–17px / 1.35 | 400 | Song and tile titles |
 | `body` | Sans | 16px / 1.55 | 400 | Descriptions, help copy |
@@ -92,7 +96,10 @@ No uppercase anywhere. Mono is for values that need to align or be scanned: dura
 
 ## 4. Components
 
-Buttons, inputs, sidebar, dialogs, toast and focus follow Podnook's rules: three button variants, 40px (44px on touch), the left-to-right hover fill, `border-strong` input edges with a lamp focus edge, 2px lamp focus outline.
+Inputs, sidebar, dialogs, toast and focus follow Podnook's rules: `border-strong` input edges with a lamp focus edge and a 2px lamp focus outline.
+
+### Buttons
+Three variants, 40px (44px on touch), with the left-to-right hover fill. Primary and secondary buttons are preset keys: a 3px lip under the key (`lamp-deep` under primary, `lip` under secondary) and a press that sinks the key 3px onto it. Ghost buttons stay flat, so primary, secondary and ghost still read in that order.
 
 ### Song row
 64px row with a hairline below: 40px art (or the track number on album pages), title in `title`, "artist · album" in `small` muted, duration in `value`, and a More button. The whole row plays the list from that song; the loaded song's row gets `lamp-wash`, a 2px lamp bar and a lamp play or pause glyph over its art. Rows use `content-visibility: auto` so libraries in the thousands scroll smoothly.
@@ -107,7 +114,16 @@ Albums and playlists use Podnook's show tiles: square art, title in `title`, a `
 120px art (72px on phone), display title, a `value` line of count and total time, then Play (lamp), Shuffle (secondary) and, on playlists, Add songs, Rename and Delete (ghost).
 
 ### Dock
-Podnook's dock with Previous, Play and Next as the transport and shuffle and repeat toggles where the speed button was. Toggles are 40px icon buttons in `text-subtle`; on, they turn `text` with a 4px square under the icon. They are never lamp, because they are settings, not where you are. Under 400px the toggles move to the full player only.
+Podnook's dock with Previous, Play and Next as the transport and shuffle and repeat toggles where the speed button was. Toggles are latching keys: 40px `key` squares on a `lip` in `text-subtle`. On, they stay pushed down onto the lip and turn `text` on `surface-hover`, as a radio preset stays in while its station plays. They are never lamp, because they are settings, not where you are. Mute on the desktop dock and like in the full player work the same way. Under 400px the toggles move to the full player only.
+
+### Full player
+Full screen on phones, a dialog on desktop. The cover is the one large element. Below it: the title (which shows the song in the library) with like beside it, the artist and album, a full-width seek bar with times beneath, then the transport. Previous, Play and Next form a tape-deck bank: three keys joined in one `canvas` block, `key` faces with Play in lamp, each on its lip. Shuffle and repeat sit either side as latching keys. A quiet footer holds the sleep timer, which opens its choices in a menu sheet, and up next.
+
+### Band switch
+Settings with a few fixed positions, such as online artwork Off and On, use a band switch, like a radio's AM/FM slider: the positions sit in a `canvas` groove and a `key` thumb with a `border-strong` edge slides to the one that's set. The set position's label is `text`, the others `text-subtle`. It's never lamp, because it's a setting.
+
+### Review
+A tuning dial picks the period: the choices sit along a hairline scale with tick marks, and a 2px lamp needle slides to the one you're on.
 
 ### Add music
 Panels on `surface`: Copy songs into TuneNook (Choose files is the lamp action; Choose a folder is secondary and hidden on iOS), Play a folder in place (Chromium only), and Storage. A running import shows above them as a panel with a `value` "n of m" line, a 2px progress track and Stop. The summary is one plain paragraph.
@@ -119,11 +135,13 @@ Panels on `surface`: Copy songs into TuneNook (Choose files is the lamp action; 
 
 ## 6. Depth
 
-None. Layers separate by tone alone: `canvas-deep` under `canvas` under `surface`. No shadows, no borders on surfaces.
+Layers separate by tone alone: `canvas-deep` under `canvas` under `surface`. No borders on surfaces. The one drop is a key's 3px lip, which is part of the key, not a shadow cast on the page.
 
 ## 7. Motion
 
 - Hover and state: 300ms, `cubic-bezier(0.2, 0, 0, 1)`.
+- Key press: 120ms sink onto the lip.
+- Tuning dial needle: 400ms slide. Band switch thumb: 300ms slide. Neither moves with reduced motion.
 - View change: 200ms fade.
 - Dialog and toast: 240ms top-down reveal, instant exit.
 - Nothing blinks or loops. Now playing is a static lamp mark (the play glyph and the wash), never animated bars.

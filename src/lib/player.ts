@@ -33,7 +33,7 @@ const VOLUME_KEY = "tunenook.volume";
 const FADE_MS = 10_000;
 
 // "song" stops at the end of whatever song is playing then, so it follows a skip.
-export type SleepTimer = { kind: "at"; endsAt: number } | { kind: "song" };
+export type SleepTimer = { kind: "at"; endsAt: number; minutes: number } | { kind: "song" };
 
 export type Failure = { kind: "error" } | { kind: "access"; folderId: string };
 
@@ -527,7 +527,7 @@ export function setVolume(level: number): void {
 export function setSleepTimer(choice: number | "song" | null): void {
   clearSleep();
   if (choice !== null) {
-    sleep = choice === "song" ? { kind: "song" } : { kind: "at", endsAt: Date.now() + choice * 60_000 };
+    sleep = choice === "song" ? { kind: "song" } : { kind: "at", endsAt: Date.now() + choice * 60_000, minutes: choice };
     emit();
   }
   applyVolume();

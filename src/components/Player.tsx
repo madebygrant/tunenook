@@ -29,8 +29,9 @@ import { isIOS } from "../lib/standalone";
 import { isShortcut } from "../lib/keys";
 import { idAt } from "../lib/queue";
 import { Dialog } from "./Dialog";
-import { ChevronDownIcon, CloseIcon, HeartIcon, MoonIcon, MutedIcon, NextIcon, PauseIcon, PlayIcon, PrevIcon, RefreshIcon, RepeatIcon, RepeatOneIcon, ShuffleIcon, VolumeIcon } from "./icons";
+import { ChevronDownIcon, HeartIcon, MoonIcon, MutedIcon, NextIcon, PauseIcon, PlayIcon, PrevIcon, RefreshIcon, RepeatIcon, RepeatOneIcon, ShuffleIcon, VolumeIcon } from "./icons";
 import type { View } from "./Sidebar";
+import { MenuSheet } from "./SongMenu";
 import { Button, CoverArt } from "./ui";
 
 const COLLAPSED_KEY = "tunenook.dockCollapsed";
@@ -64,6 +65,7 @@ function Countdown({ endsAt }: { endsAt: number }) {
   return <>Stops in {formatClock(Math.max(0, Math.ceil(endsAt / 1000) - now))}</>;
 }
 
+// A quiet line in the player that opens the choices in their own sheet, so they never crowd the controls.
 function SleepTimerControl() {
   const sleep = useSleepTimer();
   const [open, setOpen] = useState(false);
@@ -73,31 +75,42 @@ function SleepTimerControl() {
   };
 
   return (
-    <div className="sleep-timer">
-      <button className="sleep-btn" aria-expanded={open} onClick={() => setOpen(!open)}>
+    <>
+      <button className={`sheet-quiet${sleep ? " is-set" : ""}`} aria-haspopup="dialog" onClick={() => setOpen(true)}>
         <MoonIcon />
         <span>{!sleep ? "Sleep timer" : sleep.kind === "song" ? "Stops after this song" : <Countdown endsAt={sleep.endsAt} />}</span>
       </button>
       {open && (
-        <div className="sleep-options" role="group" aria-label="Stop playing after">
-          {SLEEP_MINUTES.map((minutes) => (
-            <Button key={minutes} variant="secondary" small onClick={() => choose(minutes)}>
-              {minutes} min
-            </Button>
-          ))}
-          <div className="sleep-extras">
-            <Button variant="secondary" small aria-pressed={sleep?.kind === "song"} onClick={() => choose("song")}>
-              End of this song
-            </Button>
+        <MenuSheet label="Sleep timer" title="Sleep timer" subtitle="Stop playing after" onClose={() => setOpen(false)}>
+          <ul className="menu-list">
+            {SLEEP_MINUTES.map((minutes) => (
+              <li key={minutes}>
+                <button className="menu-item" onClick={() => choose(minutes)}>
+                  {minutes === 60 ? "1 hour" : `${minutes} minutes`}
+                  {sleep?.kind === "at" && sleep.minutes === minutes && <span className="menu-note">On</span>}
+                </button>
+              </li>
+            ))}
+            <li>
+              <button className="menu-item" onClick={() => choose("song")}>
+                End of this song
+                {sleep?.kind === "song" && <span className="menu-note">On</span>}
+              </button>
+            </li>
             {sleep && (
-              <Button variant="ghost" small onClick={() => choose(null)}>
-                Turn off
-              </Button>
+              <>
+                <li className="menu-gap" aria-hidden="true" />
+                <li>
+                  <button className="menu-item" onClick={() => choose(null)}>
+                    Turn off
+                  </button>
+                </li>
+              </>
             )}
-          </div>
-        </div>
+          </ul>
+        </MenuSheet>
       )}
-    </div>
+    </>
   );
 }
 
@@ -203,32 +216,32 @@ export function Player({ onNavigate, onShowCurrent }: { onNavigate: (view: View)
   const liked = track.likedAt !== undefined;
   // A song played without adding isn't saved, so there's nothing to keep a like on.
   const canLike = track.source.kind !== "session";
-  const modes = (withLike: boolean) => (
-    <div className="modes">
-      {withLike && canLike && (
-        <button className="mode-btn" aria-pressed={liked} aria-label="Like" title={`${liked ? "Liked" : "Like"} (L)`} onClick={likeCurrent}>
-          <HeartIcon filled={liked} />
-        </button>
-      )}
-      <button
-        className="mode-btn"
-        aria-pressed={queue.shuffle}
-        aria-label="Shuffle"
-        title={`Shuffle ${queue.shuffle ? "on" : "off"} (S)`}
-        onClick={toggleShuffle}
-      >
-        <ShuffleIcon />
-      </button>
-      <button
-        className="mode-btn"
-        aria-pressed={queue.repeat !== "off"}
-        aria-label={`${repeatLabel}. Change repeat`}
-        title={`${repeatLabel} (R)`}
-        onClick={cycleRepeat}
-      >
-        {queue.repeat === "one" ? <RepeatOneIcon /> : <RepeatIcon />}
-      </button>
-    </div>
+  const likeButton = canLike && (
+    <button className="mode-btn" aria-pressed={liked} aria-label="Like" title={`${liked ? "Liked" : "Like"} (L)`} onClick={likeCurrent}>
+      <HeartIcon filled={liked} />
+    </button>
+  );
+  const shuffleButton = (
+    <button
+      className="mode-btn"
+      aria-pressed={queue.shuffle}
+      aria-label="Shuffle"
+      title={`Shuffle ${queue.shuffle ? "on" : "off"} (S)`}
+      onClick={toggleShuffle}
+    >
+      <ShuffleIcon />
+    </button>
+  );
+  const repeatButton = (
+    <button
+      className="mode-btn"
+      aria-pressed={queue.repeat !== "off"}
+      aria-label={`${repeatLabel}. Change repeat`}
+      title={`${repeatLabel} (R)`}
+      onClick={cycleRepeat}
+    >
+      {queue.repeat === "one" ? <RepeatOneIcon /> : <RepeatIcon />}
+    </button>
   );
 
   const seekRow = (dock: boolean) =>
@@ -298,62 +311,72 @@ export function Player({ onNavigate, onShowCurrent }: { onNavigate: (view: View)
       </span>
       {transport}
       {seekRow(true)}
-      {modes(false)}
+      <div className="modes">
+        {shuffleButton}
+        {repeatButton}
+      </div>
       {canSetVolume && <VolumeControl muted={muted} />}
       <button className="dock-toggle" aria-expanded={!collapsed} aria-label={collapsed ? "Expand player" : "Collapse player"} onClick={toggleCollapsed}>
         <ChevronDownIcon />
       </button>
       {expanded && (
         <Dialog label="Player" className="player-sheet" onClose={() => setExpanded(false)}>
-          <button className="sheet-close" data-autofocus aria-label="Close player" onClick={() => setExpanded(false)}>
-            <CloseIcon />
+          <button className="sheet-dismiss" data-autofocus aria-label="Close player" onClick={() => setExpanded(false)}>
+            <ChevronDownIcon />
           </button>
-          <CoverArt artId={track.artId} title={track.album || track.title} size={240} />
+          <CoverArt artId={track.artId} title={track.album || track.title} size={320} />
           <div className="sheet-head">
-            <div className="sheet-title">{track.title}</div>
-            {muted && <div className="muted">Muted. Press M to unmute.</div>}
-            <div className="sheet-links">
-              {artistView ? (
-                <button className="show-link" onClick={() => go(artistView)}>
-                  {track.artist}
-                </button>
-              ) : (
-                <span>{track.artist}</span>
-              )}
-              {albumView && (
-                <>
-                  <span aria-hidden="true">·</span>
-                  <button className="show-link" onClick={() => go(albumView)}>
-                    {track.album}
+            <div className="sheet-text">
+              <button
+                className="sheet-title"
+                title={track.source.kind === "session" ? "Show in queue" : "Show in library"}
+                aria-label={`${track.title}. ${track.source.kind === "session" ? "Show in queue" : "Show in library"}`}
+                onClick={() => {
+                  setExpanded(false);
+                  onShowCurrent();
+                }}
+              >
+                {track.title}
+              </button>
+              <div className="sheet-links">
+                {artistView ? (
+                  <button className="sheet-link" onClick={() => go(artistView)}>
+                    {track.artist}
                   </button>
-                </>
-              )}
+                ) : (
+                  <span>{track.artist}</span>
+                )}
+                {albumView && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <button className="sheet-link" onClick={() => go(albumView)}>
+                      {track.album}
+                    </button>
+                  </>
+                )}
+              </div>
+              {muted && <p className="muted">Muted. Press M to unmute.</p>}
             </div>
-            <button
-              className="show-link"
-              onClick={() => {
-                setExpanded(false);
-                onShowCurrent();
-              }}
-            >
-              {track.source.kind === "session" ? "Show in queue" : "Show in library"}
-            </button>
+            {likeButton}
           </div>
           {seekRow(false)}
-          <div className="sheet-controls">
+          <div className="sheet-transport">
+            {shuffleButton}
             {transport}
-            {modes(true)}
+            {repeatButton}
           </div>
-          <SleepTimerControl />
-          <button
-            className="up-next"
-            onClick={() => {
-              setExpanded(false);
-              onNavigate({ kind: "queue" });
-            }}
-          >
-            {upNext ? `Up next: ${upNext.title}` : "Open the queue"}
-          </button>
+          <div className="sheet-foot">
+            <SleepTimerControl />
+            <button
+              className="up-next"
+              onClick={() => {
+                setExpanded(false);
+                onNavigate({ kind: "queue" });
+              }}
+            >
+              {upNext ? `Up next: ${upNext.title}` : "Open the queue"}
+            </button>
+          </div>
         </Dialog>
       )}
     </div>

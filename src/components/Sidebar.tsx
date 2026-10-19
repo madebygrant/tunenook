@@ -13,7 +13,8 @@ export type View =
   | { kind: "liked" }
   | { kind: "queue" }
   | { kind: "review" }
-  | { kind: "add" };
+  | { kind: "add" }
+  | { kind: "storage" };
 
 interface Props {
   view: View;
@@ -34,7 +35,7 @@ const ITEMS: { kind: View["kind"]; label: string; icon: ReactNode; also?: View["
   { kind: "playlists", label: "Playlists", icon: <PlaylistIcon />, also: ["playlist", "liked"] },
   { kind: "queue", label: "Queue", icon: <QueueIcon /> },
   { kind: "review", label: "Review", icon: <ReviewIcon /> },
-  { kind: "add", label: "Add music", icon: <AddMusicIcon /> },
+  { kind: "add", label: "Add music", icon: <AddMusicIcon />, also: ["storage"] },
 ];
 
 export function Sidebar({ view, onNavigate, drawer, open, onClose, onShortcuts }: Props) {

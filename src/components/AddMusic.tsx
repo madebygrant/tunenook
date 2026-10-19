@@ -16,14 +16,14 @@ import { Dialog } from "./Dialog";
 import { DownloadIcon, FolderIcon, RefreshIcon, TrashIcon, UploadIcon } from "./icons";
 import { InstallHint } from "./InstallHint";
 import { Confirm } from "./SongMenu";
-import { Button, Panel } from "./ui";
+import { BandSwitch, Button, Panel } from "./ui";
 
 // File handling only works in installed desktop Chromium, the same browsers that can link folders.
 const canOpenWith = canLinkFolders && "launchQueue" in window;
 
 const ACCEPT = "audio/*,.mp3,.m4a,.m4b,.aac,.flac,.wav,.aif,.aiff,.ogg,.oga,.opus,.m3u,.m3u8,.json";
 
-export function AddMusic() {
+export function AddMusic({ onStorage }: { onStorage: () => void }) {
   const job = useJob();
   const folders = useFolders();
   const tracks = useTracks();
@@ -185,6 +185,11 @@ export function AddMusic() {
                 ? "The browser won't clear it to free space."
                 : "The browser may clear it if the device runs low on space."}
             </p>
+            <div className="dialog-actions">
+              <Button variant="secondary" small onClick={onStorage}>
+                See what's using space
+              </Button>
+            </div>
             <div className="storage-history">
               <p className="muted">
                 Play history covers the last two years.
@@ -407,10 +412,15 @@ function ArtLookupPanel({ busy }: { busy: boolean }) {
         sends each album's title and artist to MusicBrainz and downloads the cover from the Cover Art Archive. Nothing is
         looked up until you ask.
       </p>
-      <label className="switch-row">
-        <input type="checkbox" role="switch" checked={on} onChange={(e) => setArtLookup(e.target.checked)} />
-        Look up missing artwork online
-      </label>
+      <BandSwitch
+        label="Look up missing artwork online"
+        options={[
+          { value: "off", label: "Off" },
+          { value: "on", label: "On" },
+        ]}
+        value={on ? "on" : "off"}
+        onChange={(v) => setArtLookup(v === "on")}
+      />
       {on && (
         <div className="dialog-actions">
           <Button

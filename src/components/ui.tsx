@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useId,
   useState,
   type ButtonHTMLAttributes,
@@ -91,6 +92,37 @@ export function Art({ title, imageUrl, size }: ArtProps) {
       ) : (
         <span>{initials(title)}</span>
       )}
+    </div>
+  );
+}
+
+// A setting with a few fixed positions, set like a radio's AM/FM switch. Radios underneath, so arrow keys move it.
+export function BandSwitch<T extends string>({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (value: T) => void;
+}) {
+  const id = useId();
+  return (
+    <div className="band" role="radiogroup" aria-labelledby={`${id}-label`}>
+      <span id={`${id}-label`} className="band-label">
+        {label}
+      </span>
+      <div className="band-track" style={{ "--at": options.findIndex((o) => o.value === value) } as CSSProperties}>
+        {options.map((o) => (
+          <Fragment key={o.value}>
+            <input type="radio" name={id} id={`${id}-${o.value}`} checked={o.value === value} onChange={() => onChange(o.value)} />
+            <label htmlFor={`${id}-${o.value}`}>{o.label}</label>
+          </Fragment>
+        ))}
+        <span className="band-thumb" aria-hidden="true" />
+      </div>
     </div>
   );
 }

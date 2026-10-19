@@ -207,6 +207,12 @@ export function storedBytes(): number {
   return total;
 }
 
+// Blob sizes come from the browser's records, so the artwork itself isn't read.
+export async function artBytes(): Promise<number> {
+  const blobs = await getAll<Blob>("art");
+  return blobs.reduce((n, b) => n + (b?.size ?? 0), 0);
+}
+
 // Oldest first, including plays of removed songs. Replaced on change, never edited in place.
 export function getPlays(): readonly Play[] {
   return plays;

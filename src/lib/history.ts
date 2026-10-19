@@ -2,7 +2,7 @@ import { useEffect, useRef, type RefObject } from "react";
 import type { View } from "../components/Sidebar";
 
 const SONGS: View = { kind: "songs" };
-const PLAIN_KINDS = new Set<string>(["songs", "albums", "artists", "playlists", "liked", "queue", "review", "add"] satisfies View["kind"][]);
+const PLAIN_KINDS = new Set<string>(["songs", "albums", "artists", "playlists", "liked", "queue", "review", "add", "storage"] satisfies View["kind"][]);
 
 export function viewHash(view: View): string {
   if (view.kind === "album" || view.kind === "artist") return `#/${view.kind}/${encodeURIComponent(view.key)}`;

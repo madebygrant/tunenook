@@ -13,6 +13,7 @@ import { Shortcuts } from "./components/Shortcuts";
 import { Sidebar, type View } from "./components/Sidebar";
 import { SongMenu, type MenuTarget } from "./components/SongMenu";
 import { Songs } from "./components/Songs";
+import { StoragePage } from "./components/StoragePage";
 import { Button } from "./components/ui";
 import { useAnnouncement } from "./lib/announce";
 import { isShortcut } from "./lib/keys";
@@ -142,7 +143,7 @@ export default function App() {
         ? (artists.find((a) => a.key === v.key)?.name ?? "Artist")
         : v.kind === "playlist"
           ? (playlists.find((p) => p.id === v.id)?.name ?? "Playlist")
-          : { songs: "Songs", albums: "Albums", artists: "Artists", playlists: "Playlists", liked: "Liked songs", queue: "Queue", review: "Review", add: "Add music" }[v.kind];
+          : { songs: "Songs", albums: "Albums", artists: "Artists", playlists: "Playlists", liked: "Liked songs", queue: "Queue", review: "Review", add: "Add music", storage: "Storage" }[v.kind];
   const pageTitle = titleFor(view);
   const nowPlayingTitle = now.playing ? nowTrack?.title : undefined;
 
@@ -340,8 +341,14 @@ export default function App() {
             onOpenArtist={(key) => navigate({ kind: "artist", key })}
             onOpenAlbum={(key) => navigate({ kind: "album", key })}
           />
+        ) : view.kind === "storage" ? (
+          <StoragePage
+            onBack={() => navigate({ kind: "add" })}
+            onOpenAlbum={(key) => navigate({ kind: "album", key })}
+            onMore={(t) => openMenu(t, { kind: "library" })}
+          />
         ) : (
-          <AddMusic />
+          <AddMusic onStorage={() => navigate({ kind: "storage" })} />
         )}
       </main>
 

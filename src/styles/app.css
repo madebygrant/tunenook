@@ -14,7 +14,16 @@
   --lamp: #e0a46a;
   --lamp-bright: #f2bd85;
   --lamp-deep: #b8803f;
+  /* Chart parts, in their fixed order; validated as neighbours on --canvas. */
+  --viz-1: #3987e5;
+  --viz-2: #d95926;
+  --viz-3: #199e70;
+  --viz-4: #c98500;
+  --viz-rest: #4b5163;
   --lamp-wash: rgb(224 164 106 / 0.1);
+  /* Key face and the lip a key sits on; see Buttons in DESIGN.md. */
+  --key: #1a1f2d;
+  --lip: #2c3242;
   --danger: #e07a6a;
   --danger-wash: rgb(224 122 106 / 0.12);
   --scrim: rgb(10 12 18 / 0.8);
@@ -254,6 +263,26 @@ h1[tabindex="-1"]:focus {
 .xh-btn:active:not(:disabled),
 .xh-play:active:not(:disabled) {
   transform: translateY(1px);
+}
+/* Preset keys: primary and secondary sit on a 3px lip and sink onto it when pressed. Ghosts stay flat. */
+.xh-btn--primary,
+.xh-btn--secondary {
+  --lip-colour: var(--lip);
+  box-shadow: 0 3px 0 var(--lip-colour);
+  transition:
+    background var(--slow) var(--ease),
+    color var(--slow) var(--ease),
+    border-color var(--slow) var(--ease),
+    transform 120ms var(--ease),
+    box-shadow 120ms var(--ease);
+}
+.xh-btn--primary {
+  --lip-colour: var(--lamp-deep);
+}
+.xh-btn--primary:active:not(:disabled),
+.xh-btn--secondary:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow: 0 0 0 var(--lip-colour);
 }
 .xh-btn--primary {
   --sweep: var(--lamp-bright);
@@ -1211,110 +1240,231 @@ mark {
 .player-sheet {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  text-align: center;
+  gap: 20px;
 }
-.player-sheet .sheet-close {
-  align-self: flex-end;
-}
-.player-sheet .xh-art {
-  width: min(240px, 32vh);
-  height: min(240px, 32vh);
-}
-.player-sheet .sheet-title {
-  font-size: 22px;
-  font-weight: 400;
-  line-height: 1.3;
-}
-.player-sheet .show-link {
+.sheet-dismiss {
+  align-self: flex-start;
   display: inline-flex;
   align-items: center;
-  min-height: 44px;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin: -10px 0 -10px -12px;
   padding: 0;
   border: 0;
   background: transparent;
   color: var(--text-muted);
-  font-size: 15px;
-  text-decoration: underline;
-  text-decoration-color: var(--border-strong);
-  text-underline-offset: 4px;
   cursor: pointer;
-  transition:
-    color var(--slow) var(--ease),
-    text-decoration-color var(--slow) var(--ease);
+  transition: color var(--slow) var(--ease);
 }
-.player-sheet .show-link:hover {
+.sheet-dismiss:hover {
   color: var(--text);
-  text-decoration-color: currentColor;
 }
-.player-sheet .sheet-links {
+.sheet-dismiss svg {
+  width: 24px;
+  height: 24px;
+}
+/* The cover is the one large thing; everything below it stays small and left-aligned. */
+.player-sheet .xh-art {
+  align-self: center;
+  width: min(100%, 320px, 40vh);
+  height: auto;
+  aspect-ratio: 1;
+}
+.sheet-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.sheet-text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+}
+.sheet-title {
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 22px;
+  line-height: 1.3;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  text-decoration: underline transparent;
+  text-underline-offset: 4px;
+  transition: text-decoration-color var(--slow) var(--ease);
+}
+.sheet-title:hover {
+  text-decoration-color: var(--border-strong);
+}
+.sheet-links {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
   column-gap: 8px;
   color: var(--text-muted);
   font-size: 15px;
 }
+/* 44px to tap, without the row looking that tall. */
+.sheet-link {
+  min-height: 44px;
+  margin: -10px 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline transparent;
+  text-underline-offset: 4px;
+  transition:
+    color var(--slow) var(--ease),
+    text-decoration-color var(--slow) var(--ease);
+}
+.sheet-link:hover {
+  color: var(--text);
+  text-decoration-color: currentColor;
+}
+.sheet-text .muted {
+  font-size: 14px;
+}
+.sheet-head .mode-btn {
+  flex: none;
+  width: 44px;
+  height: 44px;
+}
+/* Full-width track with the times beneath it, so the bar runs edge to edge. */
 .player-sheet .xh-progress {
-  align-self: stretch;
+  flex: none;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 0;
 }
-.player-sheet .sheet-left {
-  font-family: var(--font-mono);
-  font-size: 32px;
-  font-weight: 300;
-  line-height: 1;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
+.player-sheet .xh-progress .seek {
+  grid-column: 1 / -1;
+  order: -1;
 }
-.sheet-controls {
+.player-sheet .xh-progress > span:last-child {
+  justify-self: end;
+}
+.sheet-transport {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 24px;
+  justify-content: space-between;
 }
-/* The sheet renders in a portal outside .xh-player, so it needs its own modes rule. */
-.player-sheet .modes {
-  display: flex;
-  justify-content: center;
-  gap: 4px;
+.sheet-transport .mode-btn {
+  width: 44px;
+  height: 44px;
 }
-.player-sheet .sheet-head {
-  display: grid;
-  gap: 4px;
-  justify-items: center;
-}
+/* Tape-deck bank: previous, play and next joined into one block of keys, with room below for their lips. */
 .player-sheet .xh-transport {
-  gap: 16px;
+  gap: 2px;
+  padding: 2px 2px 5px;
+  background: var(--canvas);
 }
+.player-sheet .xh-icon-btn,
 .player-sheet .xh-play {
-  --s: 64px;
+  --lip-colour: var(--lip);
+  height: 52px;
+  box-shadow: 0 3px 0 var(--lip-colour);
+  transition:
+    color var(--slow) var(--ease),
+    background var(--slow) var(--ease),
+    transform 120ms var(--ease),
+    box-shadow 120ms var(--ease);
 }
 .player-sheet .xh-icon-btn {
-  width: 52px;
-  height: 52px;
+  width: 56px;
+  background: var(--key);
+}
+.player-sheet .xh-icon-btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+.player-sheet .xh-play {
+  --lip-colour: var(--lamp-deep);
+  width: 72px;
+}
+.player-sheet .xh-play svg {
+  width: 20px;
+  height: 20px;
+}
+.player-sheet .xh-icon-btn:active:not(:disabled),
+.player-sheet .xh-play:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow: 0 0 0 var(--lip-colour);
+}
+.sheet-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+}
+.sheet-quiet {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-subtle);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--slow) var(--ease);
+}
+.sheet-quiet:hover,
+.sheet-quiet.is-set {
+  color: var(--text);
+}
+.sheet-quiet svg {
+  width: 18px;
+  height: 18px;
+}
+.sheet-foot .up-next {
+  min-width: 0;
+  text-align: right;
 }
 @media (max-width: 640px) {
+  /* A full screen of its own on phones, from the status bar to the home indicator. */
   .dialog-backdrop:has(.player-sheet) {
-    align-items: end;
+    align-items: stretch;
     padding: 0;
+    background: var(--surface);
   }
   .player-sheet {
     width: 100%;
+    max-height: none;
     box-sizing: border-box;
-    padding: 20px 20px max(28px, env(safe-area-inset-bottom, 0px));
+    padding: max(12px, env(safe-area-inset-top, 0px)) 20px max(16px, env(safe-area-inset-bottom, 0px));
   }
   .player-sheet .xh-art {
-    width: min(200px, 26vh);
-    height: min(200px, 26vh);
+    width: min(100%, 44vh);
+    margin-block: auto;
   }
-  .player-sheet .sheet-controls {
-    flex-direction: column;
-    gap: 8px;
+  /* Slimmer keys on phones, so the bank doesn't outweigh the cover. */
+  .player-sheet .xh-icon-btn,
+  .player-sheet .xh-play {
+    height: 44px;
   }
-  .player-sheet .modes {
-    gap: 32px;
+  .player-sheet .xh-icon-btn {
+    width: 48px;
+  }
+  .player-sheet .xh-play {
+    width: 64px;
+  }
+  .player-sheet .xh-play svg {
+    width: 18px;
+    height: 18px;
   }
 }
 .dialog-head {
@@ -1904,6 +2054,7 @@ b.mono {
   display: flex;
   gap: 4px;
 }
+/* Latching keys: a toggle that's on stays pushed down onto its lip, as a radio preset does. */
 .mode-btn {
   position: relative;
   display: inline-flex;
@@ -1913,10 +2064,15 @@ b.mono {
   height: 40px;
   padding: 0;
   border: 0;
-  background: transparent;
+  background: var(--key);
   color: var(--text-subtle);
+  box-shadow: 0 3px 0 var(--lip);
   cursor: pointer;
-  transition: color var(--slow) var(--ease);
+  transition:
+    color var(--slow) var(--ease),
+    background var(--slow) var(--ease),
+    transform 120ms var(--ease),
+    box-shadow 120ms var(--ease);
 }
 .mode-btn svg {
   width: 20px;
@@ -1925,18 +2081,14 @@ b.mono {
 .mode-btn:hover {
   color: var(--text-muted);
 }
+.mode-btn:active,
 .mode-btn[aria-pressed="true"] {
-  color: var(--text);
+  transform: translateY(3px);
+  box-shadow: 0 0 0 var(--lip);
 }
-.mode-btn[aria-pressed="true"]::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: 4px;
-  width: 4px;
-  height: 4px;
-  margin-left: -2px;
-  background: var(--text);
+.mode-btn[aria-pressed="true"] {
+  background: var(--surface-hover);
+  color: var(--text);
 }
 .up-next {
   max-width: 100%;
@@ -2146,6 +2298,8 @@ b.mono {
   .xh-btn::before,
   .xh-icon-btn svg,
   .xh-play svg,
+  .dial-needle,
+  .band-thumb,
   .songs.is-dragging .song {
     transition: none;
   }
@@ -2163,14 +2317,180 @@ b.mono {
 .space-warning p + p {
   margin-top: 12px;
 }
-.periods {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin: 12px 0 0 -10px;
+/* Tuning dial: choices along a scale with tick marks; a lamp needle marks the one you're on. */
+.dial {
+  max-width: 440px;
+  margin: 16px 0 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.dial-scale {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--count), 1fr);
+  padding-bottom: 18px;
+}
+.dial-ticks {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 8px;
+  height: 6px;
+  border-bottom: 1px solid var(--border-strong);
+}
+.dial-ticks span {
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  height: 6px;
+  background: var(--border-strong);
+}
+.dial input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.dial label {
+  display: grid;
+  place-items: center;
+  min-height: 44px;
+  font-size: 14px;
+  color: var(--text-muted);
+  text-align: center;
+  cursor: pointer;
+  transition: color var(--slow) var(--ease);
+}
+.dial label:hover,
+.dial input:checked + label {
+  color: var(--text);
+}
+.dial input:focus-visible + label {
+  outline: 2px solid var(--lamp);
+  outline-offset: -2px;
+}
+.dial-needle {
+  position: absolute;
+  bottom: 0;
+  left: calc((var(--at) + 0.5) / var(--count) * 100%);
+  width: 2px;
+  height: 22px;
+  margin-left: -1px;
+  background: var(--lamp);
+  transition: left 400ms var(--ease);
 }
 .review-summary {
   margin-top: 16px;
+}
+.usage {
+  margin-top: 24px;
+}
+.usage-tip {
+  min-height: 21px;
+  margin-bottom: 8px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+.usage-bar {
+  display: flex;
+  gap: 2px;
+  height: 24px;
+}
+.usage-seg {
+  min-width: 2px;
+  background: var(--seg);
+  cursor: pointer;
+  transition: opacity var(--slow) var(--ease);
+}
+.usage-bar.is-active .usage-seg:not(.is-active) {
+  opacity: 0.35;
+}
+.usage-legend {
+  display: grid;
+  gap: 4px;
+  margin-top: 16px;
+}
+.usage-legend li {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto 5ch;
+  align-items: center;
+  gap: 12px;
+  min-height: 32px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+.usage-legend li.is-active {
+  color: var(--text);
+}
+.swatch {
+  width: 12px;
+  height: 12px;
+  background: var(--seg);
+}
+.size-value {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.usage-share {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--text-subtle);
+}
+.usage-note {
+  margin-top: 12px;
+  font-size: 14px;
+}
+.size-list {
+  margin-top: 8px;
+}
+.size-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 16px;
+  width: 100%;
+  padding: 12px 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+button.size-row {
+  cursor: pointer;
+}
+button.size-row:hover .ttl {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.size-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.size-text .ttl,
+.size-text .sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.size-text .sub {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+.size-bar {
+  grid-column: 1 / -1;
+  height: 4px;
+}
+.size-bar span {
+  display: block;
+  min-width: 2px;
+  height: 100%;
+  background: var(--viz-1);
 }
 .storage-history p {
   font-size: 14px;
@@ -2202,17 +2522,63 @@ b.mono {
 .songs.is-windowed .song {
   content-visibility: visible;
 }
-.switch-row {
+/* Band switch: a thumb that slides between fixed positions in a dark groove, like a radio's AM/FM switch. */
+.band {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
-  min-height: 44px;
-  cursor: pointer;
+  justify-content: space-between;
+  gap: 8px 16px;
 }
-.switch-row input {
-  width: 20px;
-  height: 20px;
-  accent-color: var(--lamp);
+.band-label {
+  font-size: 15px;
+}
+.band-track {
+  position: relative;
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 64px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  background: var(--canvas);
+}
+.band input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.band label {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  height: 36px;
+  font-size: 14px;
+  color: var(--text-subtle);
+  cursor: pointer;
+  transition: color var(--slow) var(--ease);
+}
+.band label:hover {
+  color: var(--text-muted);
+}
+.band input:checked + label {
+  color: var(--text);
+}
+.band input:focus-visible + label {
+  outline: 2px solid var(--lamp);
+  outline-offset: -2px;
+}
+.band-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 64px;
+  height: 36px;
+  box-sizing: border-box;
+  border: 1px solid var(--border-strong);
+  background: var(--key);
+  transform: translateX(calc(var(--at) * 100%));
+  transition: transform var(--slow) var(--ease);
 }
 
 .xh-player .volume {
@@ -2221,45 +2587,6 @@ b.mono {
   gap: 4px;
   flex: 0 1 140px;
   min-width: 96px;
-}
-.sleep-timer {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-}
-.sleep-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 14px;
-  font-variant-numeric: tabular-nums;
-  cursor: pointer;
-  transition: color var(--slow) var(--ease);
-}
-.sleep-btn:hover {
-  color: var(--text);
-}
-.sleep-btn svg {
-  width: 18px;
-  height: 18px;
-}
-.sleep-options {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  width: 100%;
-}
-.sleep-extras {
-  grid-column: 1 / -1;
-  display: flex;
-  justify-content: center;
-  gap: 8px;
 }
 @media (max-width: 760px) {
   .xh-player .volume {
