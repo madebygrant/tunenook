@@ -1,42 +1,31 @@
 import { useEffect, useRef, useState } from "react";
 import { canLinkFolders, copyIntoLibrary, NeedsAccessError, NotEnoughSpaceError, requestAccess, scanFolder, unlinkFolder, useGranted, linkFolder } from "../lib/folders";
 import { albumsToLookUp, findMissingArt, needsArt, setArtLookup, useArtLookup } from "../lib/artLookup";
-import { backupToFolder, backupZip } from "../lib/backup";
-import { download } from "../lib/download";
 import { formatBytes, plural } from "../lib/format";
 import { bytesToImport, importFiles } from "../lib/importer";
-import { cancelJob, dismissJob, runJob, useJob } from "../lib/job";
-import { clearRemovedHistory, getTracks, useAlbums, useFolders, useRemovedPlays, useTracks } from "../lib/library";
-import { promptInstall, useCanInstall } from "../lib/pwa";
-import { isIOS, useStandalone } from "../lib/standalone";
-import { ensurePersistence, freeBytes, useStorage } from "../lib/storage";
+import { runJob, useJob } from "../lib/job";
+import { getTracks, useAlbums, useFolders, useTracks } from "../lib/library";
+import { isIOS } from "../lib/standalone";
+import { ensurePersistence, freeBytes } from "../lib/storage";
 import { describeImport } from "../lib/summary";
 import type { LinkedFolder } from "../lib/types";
 import { Dialog } from "./Dialog";
-import { DownloadIcon, FolderIcon, RefreshIcon, TrashIcon, UploadIcon } from "./icons";
+import { FolderIcon, RefreshIcon, TrashIcon, UploadIcon } from "./icons";
+import { JobPanel } from "./JobPanel";
 import { InstallHint } from "./InstallHint";
 import { Confirm } from "./SongMenu";
 import { BandSwitch, Button, Panel } from "./ui";
 
-// File handling only works in installed desktop Chromium, the same browsers that can link folders.
-const canOpenWith = canLinkFolders && "launchQueue" in window;
-
 const ACCEPT = "audio/*,.mp3,.m4a,.m4b,.aac,.flac,.wav,.aif,.aiff,.ogg,.oga,.opus,.m3u,.m3u8,.json";
 
-export function AddMusic({ onStorage }: { onStorage: () => void }) {
+export function AddMusic() {
   const job = useJob();
   const folders = useFolders();
   const tracks = useTracks();
-  // During an import the track list changes several times a second; usage is re-read when it finishes.
-  const storage = useStorage(job?.running ? "importing" : tracks.length);
-  const standalone = useStandalone();
-  const canInstall = useCanInstall();
   const [spaceWarning, setSpaceWarning] = useState<{ files: File[]; needed: number; free: number } | null>(null);
   const files = useRef<HTMLInputElement>(null);
   const folder = useRef<HTMLInputElement>(null);
   const [ios] = useState(() => isIOS());
-  const removedPlays = useRemovedPlays();
-  const [clearingHistory, setClearingHistory] = useState(false);
 
   // React has no prop for webkitdirectory.
   useEffect(() => {
@@ -138,107 +127,6 @@ export function AddMusic({ onStorage }: { onStorage: () => void }) {
           </Panel>
         )}
         {tracks.length > 0 && <ArtLookupPanel busy={job?.running ?? false} />}
-        {tracks.length > 0 && (
-          <Panel>
-            <h2 className="h3">Back up</h2>
-            {canLinkFolders ? (
-              <p className="muted">
-                Writes the songs TuneNook holds, your playlists, and your likes, play counts and edits into a folder you pick.
-                Nothing there is overwritten, and backing up to the same folder again only adds what's new. To restore, add the
-                folder with Choose a folder.
-              </p>
-            ) : (
-              <p className="muted">
-                This browser can't write to a folder, so the backup has your playlists, likes, play counts and edits, but not the
-                songs. To restore, add your music together with the unzipped backup.
-              </p>
-            )}
-            <div className="dialog-actions">
-              {canLinkFolders ? (
-                <Button
-                  variant="secondary"
-                  icon={<FolderIcon />}
-                  disabled={job?.running}
-                  onClick={() => void runJob("Backing up", (onProgress, signal) => backupToFolder(onProgress, signal))}
-                >
-                  Back up to a folder
-                </Button>
-              ) : (
-                <Button
-                  variant="secondary"
-                  icon={<DownloadIcon />}
-                  onClick={() => download(backupZip(), `tunenook-backup-${new Date().toISOString().slice(0, 10)}.zip`)}
-                >
-                  Download backup
-                </Button>
-              )}
-            </div>
-          </Panel>
-        )}
-        {storage && (
-          <Panel>
-            <h2 className="h3">Storage</h2>
-            <p className="muted">
-              Using <b className="mono">{formatBytes(storage.usage)}</b> of about <b className="mono">{formatBytes(storage.quota)}</b>{" "}
-              available to TuneNook.{" "}
-              {storage.persisted
-                ? "The browser won't clear it to free space."
-                : "The browser may clear it if the device runs low on space."}
-            </p>
-            <div className="dialog-actions">
-              <Button variant="secondary" small onClick={onStorage}>
-                See what's using space
-              </Button>
-            </div>
-            <div className="storage-history">
-              <p className="muted">
-                Play history covers the last two years.
-                {removedPlays > 0 && ` ${plural(removedPlays, "play")} of songs you've removed ${removedPlays === 1 ? "is" : "are"} still in it.`}
-              </p>
-              {removedPlays > 0 && (
-                <Button variant="secondary" small icon={<TrashIcon />} disabled={job?.running} onClick={() => setClearingHistory(true)}>
-                  Clear removed songs' history
-                </Button>
-              )}
-            </div>
-            {!storage.persisted && !standalone && ios && (
-              <p className="muted">Add TuneNook to your Home Screen and iOS keeps its storage.</p>
-            )}
-            {(!storage.persisted || canOpenWith) && !standalone && !ios && canInstall && (
-              <div className="storage-install">
-                <p className="muted">
-                  Install TuneNook and{" "}
-                  {[
-                    !storage.persisted && "the browser keeps its storage",
-                    canOpenWith && "you can open audio files with it from Finder or File Explorer",
-                  ]
-                    .filter(Boolean)
-                    .join(", and ")}
-                  .
-                </p>
-                <Button variant="secondary" small onClick={() => void promptInstall()}>
-                  Install
-                </Button>
-              </div>
-            )}
-          </Panel>
-        )}
-        {clearingHistory && (
-          <Dialog label="Clear removed songs' history" onClose={() => setClearingHistory(false)}>
-            <div className="dialog-head">
-              <h2 className="h3">Clear removed songs' history?</h2>
-            </div>
-            <Confirm
-              message={`${plural(removedPlays, "play")} of songs no longer in your library will be deleted. Songs still here keep their history.`}
-              action="Clear history"
-              onCancel={() => setClearingHistory(false)}
-              onConfirm={() => {
-                setClearingHistory(false);
-                void runJob("Clearing history", async () => `Deleted ${plural(await clearRemovedHistory(), "play")} of removed songs.`);
-              }}
-            />
-          </Dialog>
-        )}
         {spaceWarning && (
           <Dialog label="Not enough space" className="space-warning" onClose={() => setSpaceWarning(null)}>
             <div className="dialog-head">
@@ -266,44 +154,6 @@ export function AddMusic({ onStorage }: { onStorage: () => void }) {
         )}
       </div>
     </section>
-  );
-}
-
-function JobPanel() {
-  const job = useJob();
-  if (!job) return null;
-  const { progress } = job;
-  return (
-    <div className="xh-panel job" role="status">
-      <h2 className="h3">{job.label}</h2>
-      {job.running && progress && (
-        <>
-          <div className="prog">
-            <span>
-              {progress.done} of {progress.total}
-            </span>
-            <div className="xh-track">
-              <div className="fill" style={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%` }} />
-            </div>
-          </div>
-          <p className="subtle job-file">{progress.current}</p>
-        </>
-      )}
-      {job.running && !progress && <p className="subtle">Starting…</p>}
-      {job.result && <p>{job.result}</p>}
-      {job.error && <p className="error-text">{job.error}</p>}
-      <div className="dialog-actions">
-        {job.running ? (
-          <Button variant="secondary" onClick={cancelJob}>
-            Stop
-          </Button>
-        ) : (
-          <Button variant="ghost" onClick={dismissJob}>
-            Dismiss
-          </Button>
-        )}
-      </div>
-    </div>
   );
 }
 

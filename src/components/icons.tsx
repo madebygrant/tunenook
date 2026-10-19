@@ -112,6 +112,12 @@ export const AddMusicIcon = (props: SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+export const StorageIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 16 16" {...base} {...props}>
+    <path d="M2 3h12v4H2zM2 9h12v4H2zM5 5h.01M5 11h.01" />
+  </svg>
+);
+
 export const MenuIcon = (props: SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 20 20" {...base} {...props}>
     <path d="M3 5h14M3 10h14M3 15h14" />

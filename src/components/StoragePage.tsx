@@ -1,14 +1,25 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { backupToFolder, backupZip } from "../lib/backup";
+import { download } from "../lib/download";
+import { canLinkFolders } from "../lib/folders";
 import { formatBytes, plural } from "../lib/format";
-import { useJob } from "../lib/job";
-import { artBytes, useAlbums, usePlaylists, usePlays, useRemovedSongs, useTrackMap, useTracks } from "../lib/library";
+import { runJob, useJob } from "../lib/job";
+import { artBytes, clearRemovedHistory, useAlbums, usePlaylists, usePlays, useRemovedPlays, useRemovedSongs, useTrackMap, useTracks } from "../lib/library";
+import { promptInstall, useCanInstall } from "../lib/pwa";
+import { isIOS, useStandalone } from "../lib/standalone";
 import { useStorage } from "../lib/storage";
 import { audioBytes, largestAlbums, largestSongs, playlistSizes, share, usageParts, type PartKey } from "../lib/storageUse";
 import type { Track } from "../lib/types";
-import { ArrowLeftIcon } from "./icons";
-import { Button } from "./ui";
+import { Dialog } from "./Dialog";
+import { DownloadIcon, FolderIcon, TrashIcon } from "./icons";
+import { JobPanel } from "./JobPanel";
+import { Confirm } from "./SongMenu";
+import { Button, Panel } from "./ui";
 
 const TOP = 10;
+
+// File handling only works in installed desktop Chromium, the same browsers that can link folders.
+const canOpenWith = canLinkFolders && "launchQueue" in window;
 
 // Colours follow the part, never its size, and are validated as neighbours in this order.
 const COLOUR: Record<PartKey, string> = {
@@ -64,11 +75,9 @@ function SizeList({ label, rows }: { label: string; rows: Row[] }) {
 }
 
 export function StoragePage({
-  onBack,
   onOpenAlbum,
   onMore,
 }: {
-  onBack: () => void;
   onOpenAlbum: (key: string) => void;
   onMore: (track: Track) => void;
 }) {
@@ -86,6 +95,11 @@ export function StoragePage({
   const storage = useStorage(measureKey ?? "busy");
   const [art, setArt] = useState<{ key: string; bytes: number | null } | null>(null);
   const [active, setActive] = useState<PartKey | null>(null);
+  const standalone = useStandalone();
+  const canInstall = useCanInstall();
+  const [ios] = useState(() => isIOS());
+  const removedPlays = useRemovedPlays();
+  const [clearingHistory, setClearingHistory] = useState(false);
 
   useEffect(() => {
     if (measureKey === null) return;
@@ -129,58 +143,153 @@ export function StoragePage({
 
   return (
     <section aria-labelledby="storage-title">
-      <Button variant="ghost" className="back" icon={<ArrowLeftIcon />} onClick={onBack}>
-        Add music
-      </Button>
       <div className="page-head">
         <h1 id="storage-title" className="display-lg" tabIndex={-1}>
           Storage
         </h1>
       </div>
-      {storage && (
-        <p className="review-summary muted">
-          Using <b className="mono">{formatBytes(storage.usage)}</b> of about <b className="mono">{formatBytes(storage.quota)}</b> available to
-          TuneNook.
-        </p>
-      )}
-      {!measured ? (
-        <p className="list-empty muted">{busy ? "Sizes update when the current task finishes." : "Measuring…"}</p>
-      ) : (
-        <div className="usage">
-          <p className="usage-tip" aria-hidden="true">
-            {shown ? [shown.label, size(shown.bytes), shown.bytes !== null && share(shown.bytes, total)].filter(Boolean).join(" · ") : "Hover or tap a part for its size."}
-          </p>
-          <div className={`usage-bar${active ? " is-active" : ""}`} aria-hidden="true" onPointerLeave={() => setActive(null)}>
-            {parts.map((p) => (
-              <span
-                key={p.key}
-                className={`usage-seg${p.key === active ? " is-active" : ""}`}
-                style={{ flexGrow: p.bytes ?? 0, "--seg": COLOUR[p.key] } as CSSProperties}
-                onPointerEnter={() => setActive(p.key)}
-                onClick={() => setActive(p.key)}
-              />
-            ))}
-          </div>
-          <ul className="usage-legend" aria-label="Space by kind">
-            {parts.map((p) => (
-              <li
-                key={p.key}
-                className={p.key === active ? "is-active" : undefined}
-                onPointerEnter={() => setActive(p.key)}
-                onPointerLeave={() => setActive(null)}
-              >
-                <span className="swatch" style={{ "--seg": COLOUR[p.key] } as CSSProperties} aria-hidden="true" />
-                <span>{p.label}</span>
-                <span className="size-value">{size(p.bytes)}</span>
-                <span className="usage-share">{p.bytes === null ? "" : share(p.bytes, total)}</span>
-              </li>
-            ))}
-          </ul>
-          <p className="usage-note muted">
-            Song details and play history are measured as the data they hold, so their sizes are close, not exact.
-            {linked > 0 && ` ${plural(linked, "song")} from linked folders stay in their folders and take no space here.`}
-          </p>
-        </div>
+      <div className="page-body">
+        <JobPanel />
+        {storage && (
+          <Panel>
+            <h2 className="h3">On this device</h2>
+            <p className="muted">
+              Using <b className="mono">{formatBytes(storage.usage)}</b> of about <b className="mono">{formatBytes(storage.quota)}</b>{" "}
+              available to TuneNook.{" "}
+              {storage.persisted
+                ? "The browser won't clear it to free space."
+                : "The browser may clear it if the device runs low on space."}
+            </p>
+            <div className="storage-history">
+              <p className="muted">
+                Play history covers the last two years.
+                {removedPlays > 0 && ` ${plural(removedPlays, "play")} of songs you've removed ${removedPlays === 1 ? "is" : "are"} still in it.`}
+              </p>
+              {removedPlays > 0 && (
+                <Button variant="secondary" small icon={<TrashIcon />} disabled={busy} onClick={() => setClearingHistory(true)}>
+                  Clear removed songs' history
+                </Button>
+              )}
+            </div>
+            {!storage.persisted && !standalone && ios && (
+              <p className="muted">Add TuneNook to your Home Screen and iOS keeps its storage.</p>
+            )}
+            {(!storage.persisted || canOpenWith) && !standalone && !ios && canInstall && (
+              <div className="storage-install">
+                <p className="muted">
+                  Install TuneNook and{" "}
+                  {[
+                    !storage.persisted && "the browser keeps its storage",
+                    canOpenWith && "you can open audio files with it from Finder or File Explorer",
+                  ]
+                    .filter(Boolean)
+                    .join(", and ")}
+                  .
+                </p>
+                <Button variant="secondary" small onClick={() => void promptInstall()}>
+                  Install
+                </Button>
+              </div>
+            )}
+          </Panel>
+        )}
+        {tracks.length > 0 && (
+          <Panel>
+            <h2 className="h3">Back up</h2>
+            {canLinkFolders ? (
+              <p className="muted">
+                Writes the songs TuneNook holds, your playlists, and your likes, play counts and edits into a folder you pick.
+                Nothing there is overwritten, and backing up to the same folder again only adds what's new. To restore, add the
+                folder with Choose a folder on Add music.
+              </p>
+            ) : (
+              <p className="muted">
+                This browser can't write to a folder, so the backup has your playlists, likes, play counts and edits, but not the
+                songs. To restore, add your music together with the unzipped backup.
+              </p>
+            )}
+            <div className="dialog-actions">
+              {canLinkFolders ? (
+                <Button
+                  variant="secondary"
+                  icon={<FolderIcon />}
+                  disabled={busy}
+                  onClick={() => void runJob("Backing up", (onProgress, signal) => backupToFolder(onProgress, signal))}
+                >
+                  Back up to a folder
+                </Button>
+              ) : (
+                <Button
+                  variant="secondary"
+                  icon={<DownloadIcon />}
+                  onClick={() => download(backupZip(), `tunenook-backup-${new Date().toISOString().slice(0, 10)}.zip`)}
+                >
+                  Download backup
+                </Button>
+              )}
+            </div>
+          </Panel>
+        )}
+        {clearingHistory && (
+          <Dialog label="Clear removed songs' history" onClose={() => setClearingHistory(false)}>
+            <div className="dialog-head">
+              <h2 className="h3">Clear removed songs' history?</h2>
+            </div>
+            <Confirm
+              message={`${plural(removedPlays, "play")} of songs no longer in your library will be deleted. Songs still here keep their history.`}
+              action="Clear history"
+              onCancel={() => setClearingHistory(false)}
+              onConfirm={() => {
+                setClearingHistory(false);
+                void runJob("Clearing history", async () => `Deleted ${plural(await clearRemovedHistory(), "play")} of removed songs.`);
+              }}
+            />
+          </Dialog>
+        )}
+      </div>
+      {tracks.length > 0 && (
+        <>
+          <h2 className="h3 section-title">What's using space</h2>
+          {!measured ? (
+            <p className="list-empty muted">{busy ? "Sizes update when the current task finishes." : "Measuring…"}</p>
+          ) : (
+            <div className="usage">
+              <p className="usage-tip" aria-hidden="true">
+                {shown ? [shown.label, size(shown.bytes), shown.bytes !== null && share(shown.bytes, total)].filter(Boolean).join(" · ") : "Hover or tap a part for its size."}
+              </p>
+              <div className={`usage-bar${active ? " is-active" : ""}`} aria-hidden="true" onPointerLeave={() => setActive(null)}>
+                {parts.map((p) => (
+                  <span
+                    key={p.key}
+                    className={`usage-seg${p.key === active ? " is-active" : ""}`}
+                    style={{ flexGrow: p.bytes ?? 0, "--seg": COLOUR[p.key] } as CSSProperties}
+                    onPointerEnter={() => setActive(p.key)}
+                    onClick={() => setActive(p.key)}
+                  />
+                ))}
+              </div>
+              <ul className="usage-legend" aria-label="Space by kind">
+                {parts.map((p) => (
+                  <li
+                    key={p.key}
+                    className={p.key === active ? "is-active" : undefined}
+                    onPointerEnter={() => setActive(p.key)}
+                    onPointerLeave={() => setActive(null)}
+                  >
+                    <span className="swatch" style={{ "--seg": COLOUR[p.key] } as CSSProperties} aria-hidden="true" />
+                    <span>{p.label}</span>
+                    <span className="size-value">{size(p.bytes)}</span>
+                    <span className="usage-share">{p.bytes === null ? "" : share(p.bytes, total)}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="usage-note muted">
+                Song details and play history are measured as the data they hold, so their sizes are close, not exact.
+                {linked > 0 && ` ${plural(linked, "song")} from linked folders stay in their folders and take no space here.`}
+              </p>
+            </div>
+          )}
+        </>
       )}
       {albumRows.length > 0 && (
         <>

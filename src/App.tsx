@@ -341,12 +341,11 @@ export default function App() {
           />
         ) : view.kind === "storage" ? (
           <StoragePage
-            onBack={() => navigate({ kind: "add" })}
             onOpenAlbum={(key) => navigate({ kind: "album", key })}
             onMore={(t) => openMenu(t, { kind: "library" })}
           />
         ) : (
-          <AddMusic onStorage={() => navigate({ kind: "storage" })} />
+          <AddMusic />
         )}
       </main>
 

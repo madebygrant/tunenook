@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { useCloseOnBack } from "../lib/history";
-import { AddMusicIcon, AlbumIcon, ArtistIcon, BrandMark, CloseIcon, PlaylistIcon, QueueIcon, ReviewIcon, SongsIcon } from "./icons";
+import { AddMusicIcon, AlbumIcon, ArtistIcon, BrandMark, CloseIcon, PlaylistIcon, QueueIcon, ReviewIcon, SongsIcon, StorageIcon } from "./icons";
 
 export type View =
   | { kind: "songs" }
@@ -35,7 +35,8 @@ const ITEMS: { kind: View["kind"]; label: string; icon: ReactNode; also?: View["
   { kind: "artists", label: "Artists", icon: <ArtistIcon />, also: ["artist"] },
   { kind: "queue", label: "Queue", icon: <QueueIcon /> },
   { kind: "review", label: "Review", icon: <ReviewIcon /> },
-  { kind: "add", label: "Add music", icon: <AddMusicIcon />, also: ["storage"] },
+  { kind: "add", label: "Add music", icon: <AddMusicIcon /> },
+  { kind: "storage", label: "Storage", icon: <StorageIcon /> },
 ];
 
 export function Sidebar({ view, onNavigate, drawer, open, onClose, onShortcuts }: Props) {

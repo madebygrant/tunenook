@@ -126,7 +126,10 @@ Settings with a few fixed positions, such as online artwork Off and On, use a ba
 A tuning dial picks the period: the choices sit along a hairline scale with tick marks, and a 2px lamp needle slides to the one you're on.
 
 ### Add music
-Panels on `surface`: Copy songs into TuneNook (Choose files is the lamp action; Choose a folder is secondary and hidden on iOS), Play a folder in place (Chromium only), and Storage. A running import shows above them as a panel with a `value` "n of m" line, a 2px progress track and Stop. The summary is one plain paragraph.
+Panels on `surface`: Copy songs into TuneNook (Choose files is the lamp action; Choose a folder is secondary and hidden on iOS), Play a folder in place (Chromium only), and Online artwork. A running import shows above them as a panel with a `value` "n of m" line, a 2px progress track and Stop. The summary is one plain paragraph.
+
+### Storage
+Its own sidebar item after Add music. On this device (usage, whether the browser keeps it, play history) and Back up sit in `surface` panels, with a running backup's panel above them. What's using space follows: the usage bar and the largest albums, songs and playlists.
 
 ## 5. Layout
 

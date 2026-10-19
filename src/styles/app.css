@@ -2392,6 +2392,9 @@ b.mono {
 .usage {
   margin-top: 24px;
 }
+.section-title + .usage {
+  margin-top: 0;
+}
 .usage-tip {
   min-height: 21px;
   margin-bottom: 8px;
