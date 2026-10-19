@@ -357,7 +357,7 @@ export function Player({ onNavigate, onShowCurrent }: { onNavigate: (view: View)
         <ChevronDownIcon />
       </button>
       {expanded && (
-        <Dialog label="Player" className="player-sheet" onClose={() => setExpanded(false)}>
+        <Dialog label="Player" className="player-sheet" swipeToClose onClose={() => setExpanded(false)}>
           <button className="sheet-dismiss" data-autofocus aria-label="Close player" onClick={() => setExpanded(false)}>
             <ChevronDownIcon />
           </button>

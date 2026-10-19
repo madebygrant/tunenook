@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useCloseOnBack } from "../lib/history";
+import { useSwipeDown } from "../lib/useSwipeDown";
 
 const FOCUSABLE = "button:not([disabled]), a[href], input:not([disabled]), [tabindex]:not([tabindex='-1'])";
 
@@ -11,14 +12,17 @@ interface Props {
   label: string;
   onClose: () => void;
   className?: string;
+  // Dragging down from the top closes it, as a full-screen sheet does on iOS.
+  swipeToClose?: boolean;
   children: ReactNode;
 }
 
 // Rendered outside .app so the whole app can go inert while it is open.
-export function Dialog({ label, onClose, className, children }: Props) {
+export function Dialog({ label, onClose, className, swipeToClose, children }: Props) {
   const layer = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const close = useCloseOnBack(onClose);
+  useSwipeDown(box, swipeToClose ? onClose : undefined);
 
   useEffect(() => {
     const app = document.querySelector<HTMLElement>(".app");

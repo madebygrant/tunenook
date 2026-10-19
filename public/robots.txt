@@ -1,2 +1,3 @@
+# Crawling is allowed so search engines see the noindex header; blocking it here would let a linked URL be listed.
 User-agent: *
-Disallow: /
+Allow: /

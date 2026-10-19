@@ -7,6 +7,7 @@ Run against the deployed URL after a deploy that touches the service worker, pla
 - Safari shows the install hint on Add music; the installed app doesn't.
 - Add to Home Screen shows the dark tile and the label "TuneNook".
 - The status bar sits over `#06080c`. In landscape, nothing slides under the notch.
+- Tapping a song row, tile, menu item or sidebar item shows no grey box, but the item lights while pressed. Long-pressing a cover shows no Save to Photos menu, and long-pressing a row selects no text.
 
 ## Import
 
@@ -24,6 +25,8 @@ Run against the deployed URL after a deploy that touches the service worker, pla
 - Lock-screen Next and Previous work with the screen locked.
 - Pause for 10+ minutes, then resume from the lock screen.
 - Headphones unplugged pauses; AirPods double-tap skips.
+- Dragging the full player down from the cover closes it; a short drag springs back. Dragging the seek bar or scrolling the sheet doesn't move it.
+- Holding a song row opens its menu without playing it; scrolling a list past rows doesn't open one.
 - The output button shows in the full player and opens the system list. Picking an AirPlay speaker lights the button; picking AirPods doesn't.
 
 ## Sleep timer

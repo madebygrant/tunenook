@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { formatClock } from "../lib/format";
 import { rowRuns, useRowWindow, WINDOW_FROM } from "../lib/rowWindow";
+import { useLongPress } from "../lib/useLongPress";
 import { useRowDrag } from "../lib/useRowDrag";
 import type { Track } from "../lib/types";
 import { CheckIcon, GripIcon, MoreIcon, PauseIcon, PlayIcon } from "./icons";
@@ -46,6 +47,7 @@ export function SongList({
   // Keyed by song rather than position, so a moved row keeps its element and its handle keeps focus.
   const keys = useMemo(() => rowKeys(tracks), [tracks]);
   const { drag, start, cancel } = useRowDrag(list, keys, (from, to) => onReorder?.(from, to));
+  const hold = useLongPress(onMore);
 
   const isSelecting = selecting !== null;
   useEffect(() => {
@@ -112,6 +114,7 @@ export function SongList({
           );
         }
         const dragged = drag?.from === i;
+        const { swallowClick, ...holdHandlers } = hold(i);
         // Rows between the dragged row and its drop point slide over to open a gap where it will land.
         const shift = !drag || dragged ? 0 : i > drag.from && i <= drag.to ? -1 : i < drag.from && i >= drag.to ? 1 : 0;
         return (
@@ -140,7 +143,8 @@ export function SongList({
               className="song-main"
               aria-label={`${current && playing ? "Pause" : "Play"} ${t.title} by ${t.artist}`}
               aria-current={current ? "true" : undefined}
-              onClick={() => onPlay(i)}
+              {...holdHandlers}
+              onClick={() => !swallowClick() && onPlay(i)}
             >
               {numbered ? (
                 <span className="song-no" aria-hidden="true">

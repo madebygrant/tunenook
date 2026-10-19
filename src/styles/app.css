@@ -53,6 +53,16 @@ body {
   color: var(--text);
   font-family: var(--font-sans);
   -webkit-text-size-adjust: 100%;
+  /* Keys already sink when pressed; iOS's grey tap box on top looks like a glitch. */
+  -webkit-tap-highlight-color: transparent;
+}
+/* Holding a song row, tile or cover on iOS selects text or offers to save the image instead of acting like an app. */
+button {
+  -webkit-user-select: none;
+  user-select: none;
+}
+img {
+  -webkit-touch-callout: none;
 }
 * {
   scrollbar-width: thin;
@@ -596,6 +606,11 @@ mark {
 .xh-nav .nav-item:hover {
   color: var(--text);
 }
+/* With iOS's tap box gone, these :active states are the only sign a press landed; hover only follows the lift. */
+.xh-nav .nav-item:active:not(.is-active) {
+  background: var(--surface-hover);
+  transition: none;
+}
 .xh-nav .nav-item.is-active {
   color: var(--text);
   background: var(--lamp-wash);
@@ -677,6 +692,10 @@ mark {
 }
 .show-open:hover .xh-art {
   outline-color: var(--text-muted);
+}
+.show-open:active .xh-art {
+  outline-color: var(--text-muted);
+  transition: none;
 }
 .xh-show .name {
   margin-top: 12px;
@@ -1218,6 +1237,10 @@ mark {
 }
 .dialog:focus {
   outline: none;
+}
+/* Springs back after a swipe down that wasn't far enough to close. */
+.dialog.is-settling {
+  transition: transform 240ms var(--ease);
 }
 .sheet-close {
   display: inline-flex;
@@ -1907,6 +1930,11 @@ b.mono {
 .song:hover {
   background: var(--surface-hover);
 }
+/* A tap is shorter than the hover fade, so the pressed state lands at once. */
+.song:has(.song-main:active) {
+  background: var(--surface-hover);
+  transition: none;
+}
 .song.is-current {
   background: var(--lamp-wash);
   box-shadow: inset 2px 0 0 var(--lamp);
@@ -2002,6 +2030,7 @@ b.mono {
   height: 16px;
 }
 .songs.is-dragging {
+  -webkit-user-select: none;
   user-select: none;
 }
 .songs.is-dragging .song-grip {
@@ -2020,6 +2049,7 @@ b.mono {
   transition: none;
 }
 .songs.is-selecting {
+  -webkit-user-select: none;
   user-select: none;
 }
 .song.is-selected {
@@ -2158,6 +2188,10 @@ b.mono {
 }
 .menu-item:hover {
   background: var(--surface-hover);
+}
+.menu-item:active {
+  background: var(--surface-hover);
+  transition: none;
 }
 .menu-item.is-danger {
   color: var(--danger);
@@ -2301,6 +2335,9 @@ b.mono {
   .toast,
   .xh-ep .prog .fill {
     animation: none;
+  }
+  .dialog.is-settling {
+    transition: none;
   }
   .xh-btn::before,
   .xh-icon-btn svg,
@@ -2472,6 +2509,9 @@ b.mono {
 }
 button.size-row {
   cursor: pointer;
+}
+button.size-row:active {
+  background: var(--surface-hover);
 }
 button.size-row:hover .ttl {
   text-decoration: underline;

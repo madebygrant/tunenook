@@ -34,8 +34,8 @@ export function InstallHint() {
     <aside className="xh-panel install-hint" aria-label="Install TuneNook">
       {homeScreen ? (
         <p>
-          Add TuneNook to your Home Screen from Safari's Share menu (it may be under ···) before adding music. The installed
-          app has its own storage, so songs added here in Safari won't be there, and iOS keeps an installed app's storage.
+          Add TuneNook to your Home Screen from the Share menu (it may be under ···) before adding music. The installed app
+          has its own storage, so songs added here in the browser won't be there, and iOS keeps an installed app's storage.
         </p>
       ) : (
         <div className="install-prompt">
