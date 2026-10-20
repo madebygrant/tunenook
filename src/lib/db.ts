@@ -50,7 +50,8 @@ function open(): Promise<IDBDatabase> {
 function done(tx: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
+    // tx.error is still null while a failed request's error event runs.
+    tx.onerror = (e) => reject((e.target as IDBRequest).error ?? tx.error);
     tx.onabort = () => reject(tx.error ?? new DOMException("Transaction aborted", "AbortError"));
   });
 }

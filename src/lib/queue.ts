@@ -88,14 +88,14 @@ export function cycleRepeat(q: Queue): Queue {
 }
 
 export function playNext(q: Queue, ids: string[]): Queue {
-  if (q.order.length === 0) return start(ids, 0, false, q.repeat);
+  if (q.order.length === 0) return start(ids, 0, q.shuffle, q.repeat);
   const added = ids.map((_, i) => q.ids.length + i);
   const order = [...q.order.slice(0, q.at + 1), ...added, ...q.order.slice(q.at + 1)];
   return { ...q, ids: [...q.ids, ...ids], order };
 }
 
 export function append(q: Queue, ids: string[]): Queue {
-  if (q.order.length === 0) return start(ids, 0, false, q.repeat);
+  if (q.order.length === 0) return start(ids, 0, q.shuffle, q.repeat);
   const added = ids.map((_, i) => q.ids.length + i);
   return { ...q, ids: [...q.ids, ...ids], order: [...q.order, ...added] };
 }
@@ -115,6 +115,8 @@ function compact(q: Queue, order: number[], at: number): Queue {
 export interface Removal {
   queue: Queue;
   currentRemoved: boolean;
+  // The removed current song was last and nothing wraps round, so playback stops.
+  ended: boolean;
 }
 
 export function removePositions(q: Queue, positions: ReadonlySet<number>): Removal {
@@ -126,8 +128,11 @@ export function removePositions(q: Queue, positions: ReadonlySet<number>): Remov
     } else kept.push(q.order[pos]);
   }
   const currentRemoved = positions.has(q.at);
-  // A removed current song hands over to the one after it.
-  return { queue: compact(q, kept, q.at - before), currentRemoved };
+  // A removed current song hands over to the one after it, or the first with repeat all.
+  const at = q.at - before;
+  const pastEnd = currentRemoved && at >= kept.length;
+  const wrap = pastEnd && q.repeat === "all";
+  return { queue: compact(q, kept, wrap ? 0 : at), currentRemoved, ended: pastEnd && !wrap };
 }
 
 export function removeIds(q: Queue, ids: ReadonlySet<string>): Removal {

@@ -115,6 +115,8 @@ export async function scanFolder(folder: LinkedFolder, onProgress: (p: Progress)
 
   for (const c of summary.copies) copies[c.path] = c.id;
   if (JSON.stringify(copies) !== JSON.stringify(folder.copies ?? {})) await saveFolder({ ...folder, copies });
+  // A stopped scan never reached some files, so a missing song may just be one it didn't get to as a move.
+  if (signal?.aborted || summary.outOfSpace) return summary;
   const moved = new Set(summary.movedIds);
   await removeTracks(new Set(missing.filter((t) => !moved.has(t.id)).map((t) => t.id)));
   return summary;

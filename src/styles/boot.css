@@ -1,0 +1,18 @@
+/* Paints before the bundle so a cold open is never a blank screen. Linked, not inline: the CSP has no inline styles. */
+html,
+body {
+  background: #0a0c12;
+}
+body {
+  margin: 0;
+}
+.boot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0;
+  color: #8a847a;
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}

@@ -30,10 +30,12 @@ describe("isShortcut", () => {
     expect(isShortcut(press(add('<div contenteditable="true"></div>')))).toBe(false);
   });
 
-  it("skips buttons and links only when asked", () => {
+  it("leaves Space and Enter to a focused button only when asked", () => {
     const button = add("<button>Play</button>");
-    expect(isShortcut(press(button))).toBe(true);
-    expect(isShortcut(press(button), { skipControls: true })).toBe(false);
+    expect(isShortcut(press(button, { key: " " }))).toBe(true);
+    expect(isShortcut(press(button, { key: " " }), { skipControls: true })).toBe(false);
+    expect(isShortcut(press(button, { key: "Enter" }), { skipControls: true })).toBe(false);
+    expect(isShortcut(press(button), { skipControls: true })).toBe(true);
   });
 
   it("rejects keys while a dialog is open, except the player sheet when allowed", () => {

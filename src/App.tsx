@@ -16,6 +16,7 @@ import { Songs } from "./components/Songs";
 import { StoragePage } from "./components/StoragePage";
 import { Button } from "./components/ui";
 import { useAnnouncement } from "./lib/announce";
+import { useJob } from "./lib/job";
 import { isShortcut } from "./lib/keys";
 import { launchView, onViewPop, pushView, replaceView, startHistory, viewHash } from "./lib/history";
 import { artistKey, getTracks, hasAlbum, hasArtist, onStorageError, trackAlbumKey, useAlbums, useArtists, useLibraryLoaded, useLoadError, usePlaylists, useTrackMap } from "./lib/library";
@@ -49,6 +50,7 @@ export default function App() {
   const updateReady = useUpdateReady();
   const announcement = useAnnouncement();
   const reloadPending = useReloadPending();
+  const busy = useJob()?.running ?? false;
   const main = useRef<HTMLElement>(null);
   const menuButton = useRef<HTMLButtonElement>(null);
   const navigated = useRef(false);
@@ -149,10 +151,10 @@ export default function App() {
     document.title = nowPlayingTitle ? `▶ ${nowPlayingTitle} · TuneNook` : `${pageTitle} · TuneNook`;
   }, [pageTitle, nowPlayingTitle]);
 
-  // The new service worker has taken over; reload once nothing is playing so a song is never cut off.
+  // The new service worker has taken over; reload once nothing is playing or importing, so neither is cut off.
   useEffect(() => {
-    if (reloadPending && !now.playing) location.reload();
-  }, [reloadPending, now.playing]);
+    if (reloadPending && !now.playing && !busy) location.reload();
+  }, [reloadPending, now.playing, busy]);
 
   const closeNav = useCallback(() => {
     // The menu button is inert while the drawer is open, so un-inert it before focusing.
@@ -210,7 +212,7 @@ export default function App() {
   const covered = navOpen && drawer;
   const notice: Toast | null =
     toast ??
-    (updateReady && !now.playing
+    (updateReady && !now.playing && !busy
       ? { message: "TuneNook has an update.", action: { label: "Reload", icon: <RefreshIcon />, run: applyUpdate } }
       : null);
 

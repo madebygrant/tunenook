@@ -61,7 +61,7 @@ let skips = 0;
 let wantPlay = false;
 let silentUrl: string | null = null;
 const listens = createListenCounter();
-// The song whose audio is on the element. A failed load keeps the old audio playing, and that isn't a play of the new song.
+// The song whose audio is on the element. A failed load leaves the old audio there, and that isn't a play of the new song.
 let countingId: string | null = null;
 const urls = new Map<string, string>();
 const pending = new Map<string, Promise<string>>();
@@ -239,6 +239,8 @@ function load(autoplay: boolean, startAt = 0): void {
   const id = currentId(queue);
   const token = ++loadToken;
   countingId = null;
+  // Play pressed before an uncached song is ready reloads from here, so it must already be the start point.
+  position = Math.floor(startAt);
   if (!audio) return;
   if (!id) {
     audio.removeAttribute("src");
@@ -259,6 +261,8 @@ function load(autoplay: boolean, startAt = 0): void {
     (ready) => token === loadToken && setSource(id, ready, autoplay, startAt),
     (e: unknown) => {
       if (token !== loadToken) return;
+      // The previous song is still on the element; left playing, play/pause couldn't stop it and its end would skip this one.
+      audio?.pause();
       loadedId = id;
       const needsAccess = e instanceof NeedsAccessError;
       setNow({ id, playing: false, failure: needsAccess ? { kind: "access", folderId: e.folderId } : { kind: "error" } });
@@ -439,7 +443,9 @@ export function initPlayer(): void {
   a.addEventListener("seeking", listens.jumped);
   a.addEventListener("seeked", () => publishPosition(a));
   a.addEventListener("volumechange", emit);
-  a.addEventListener("ended", onEnded);
+  a.addEventListener("ended", () => {
+    if (a.src !== silentUrl) onEnded();
+  });
   a.addEventListener("error", onError);
 
   if ("mediaSession" in navigator) {
@@ -478,10 +484,10 @@ function dropTracks(ids: ReadonlySet<string>): void {
   applyRemoval(removeIds(queue, ids));
 }
 
-function applyRemoval({ queue: next, currentRemoved }: Removal): void {
+function applyRemoval({ queue: next, currentRemoved, ended }: Removal): void {
   const wasPlaying = now.playing;
   setQueue(next);
-  if (currentRemoved) load(wasPlaying);
+  if (currentRemoved) load(wasPlaying && !ended);
   else prefetch();
 }
 

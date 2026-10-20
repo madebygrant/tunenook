@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useCloseOnBack } from "../lib/history";
 import { useSwipeDown } from "../lib/useSwipeDown";
 
-const FOCUSABLE = "button:not([disabled]), a[href], input:not([disabled]), [tabindex]:not([tabindex='-1'])";
+const FOCUSABLE = "button:not([disabled]), a[href], input:not([disabled]):not([hidden]):not([type='hidden']), [tabindex]:not([tabindex='-1'])";
 
 // Open dialogs, innermost last. Only the innermost takes keys, and everything under it is inert.
 const stack: HTMLElement[] = [];
@@ -36,7 +36,7 @@ export function Dialog({ label, onClose, className, swipeToClose, children }: Pr
 
     const onKey = (e: KeyboardEvent) => {
       if (stack.at(-1) !== self) return;
-      if (e.key === "Escape") return close.current();
+      if (e.key === "Escape") return e.defaultPrevented || close.current();
       if (e.key !== "Tab" || !box.current) return;
       const items = [...box.current.querySelectorAll<HTMLElement>(FOCUSABLE)];
       if (items.length === 0) return e.preventDefault();

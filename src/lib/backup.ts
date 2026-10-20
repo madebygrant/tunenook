@@ -4,6 +4,7 @@ import { plural } from "./format";
 import {
   addPlays,
   addRemovedHistory,
+  artBlob,
   createPlaylist,
   editTracks,
   getPlays,
@@ -17,7 +18,7 @@ import {
 } from "./library";
 import type { Progress } from "./importer";
 import { toM3u, trackPath } from "./m3u";
-import { slimAudio } from "./slim";
+import { slimAudio, withCoverArt } from "./slim";
 import { names } from "./summary";
 import { sourceSize } from "./tags";
 import type { Play, Playlist, RemovedSong, Track } from "./types";
@@ -159,11 +160,35 @@ export function playlistFiles(backup: Backup): { name: string; text: string }[] 
   });
 }
 
+const isText = (v: unknown): v is string => typeof v === "string";
+const isNumber = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+const TEXT_TAGS: ReadonlySet<string> = new Set(["title", "artist", "album", "albumArtist"]);
+
+// Backup files can be edited by hand. A song without a path can't be matched, and a field of the wrong type is
+// dropped rather than written into the library.
+function cleanTrack(value: unknown): BackupTrack | null {
+  if (!value || typeof value !== "object") return null;
+  const t: Record<string, unknown> = { ...value };
+  if (!isText(t.path)) return null;
+  for (const k of TAGS) if (!(TEXT_TAGS.has(k) ? isText(t[k]) : t[k] === null || isNumber(t[k]))) delete t[k];
+  for (const k of ["size", "addedAt", "likedAt", "playCount", "lastPlayedAt"]) if (!isNumber(t[k])) delete t[k];
+  return t as unknown as BackupTrack;
+}
+
+function cleanPlaylist(value: unknown): Backup["playlists"][number] | null {
+  if (!value || typeof value !== "object") return null;
+  const { name, paths } = value as Record<string, unknown>;
+  if (!isText(name) || !Array.isArray(paths)) return null;
+  return { ...value, name, paths: paths.filter(isText) };
+}
+
 export function parseBackup(text: string): Backup | null {
   try {
     const data = JSON.parse(text) as Partial<Backup>;
     if (data.app !== "tunenook" || data.version !== 1 || !Array.isArray(data.tracks) || !Array.isArray(data.playlists)) return null;
-    return data as Backup;
+    const tracks = data.tracks.flatMap((t) => cleanTrack(t) ?? []);
+    const playlists = data.playlists.flatMap((p) => cleanPlaylist(p) ?? []);
+    return { ...data, tracks, playlists } as Backup;
   } catch {
     return null;
   }
@@ -229,7 +254,7 @@ export function restorePlan(
     if (!fresh.has(t.id) || plan.stats.has(t.id)) continue;
     const changed = TAGS.filter((k) => saved[k] !== undefined && saved[k] !== t[k]);
     if (changed.length) plan.tags.set(t.id, Object.fromEntries(changed.map((k) => [k, saved[k]])));
-    plan.stats.set(t.id, { addedAt: saved.addedAt, likedAt: saved.likedAt, playCount: saved.playCount, lastPlayedAt: saved.lastPlayedAt });
+    plan.stats.set(t.id, { addedAt: saved.addedAt ?? t.addedAt, likedAt: saved.likedAt, playCount: saved.playCount, lastPlayedAt: saved.lastPlayedAt });
     for (const at of times(saved.plays)) plan.plays.push({ trackId: t.id, at });
   }
   if (picked === 0) return plan;
@@ -363,9 +388,13 @@ export async function backupToFolder(onProgress: (p: Progress) => void, signal?:
       if (!blob) throw new Error("No stored copy");
       const parts = planned.get(t.id)!.split("/");
       const name = parts.pop()!;
+      // The stored copy's cover was moved to the art store on import; put it back so a restore keeps it.
+      const art = t.artId ? await artBlob(t.artId).catch(() => undefined) : undefined;
+      const data = (art && (await withCoverArt(blob, art))) || blob;
       // A file from an earlier backup may still hold the cover the stored copy has since dropped.
-      const same = async (file: File) => (await sameBytes(file, blob)) || (await sameBytes((await slimAudio(file)) ?? file, blob));
-      const result = await writeNew(await folderAt(parts), name, blob, same);
+      const same = async (file: File) =>
+        (await sameBytes(file, data)) || (await sameBytes(file, blob)) || (await sameBytes((await slimAudio(file)) ?? file, blob));
+      const result = await writeNew(await folderAt(parts), name, data, same);
       written.set(t.id, [...parts, result.name].join("/"));
       if (result.written) wrote++;
     } catch {

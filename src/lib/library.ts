@@ -795,11 +795,12 @@ const artUrls = new Map<string, Promise<string | null>>();
 export const artBlob = async (artId: string) => sessionArt.get(artId) ?? get<Blob>("art", artId);
 
 export function artUrl(artId: string): Promise<string | null> {
-  let url = artUrls.get(artId);
-  if (!url) {
-    url = artBlob(artId).then((blob) => (blob ? URL.createObjectURL(blob) : null));
-    artUrls.set(artId, url);
-  }
+  const cached = artUrls.get(artId);
+  if (cached) return cached;
+  const url = artBlob(artId).then((blob) => (blob ? URL.createObjectURL(blob) : null));
+  // A failed read, such as Safari dropping the database connection, is tried again next time.
+  url.catch(() => artUrls.get(artId) === url && artUrls.delete(artId));
+  artUrls.set(artId, url);
   return url;
 }
 

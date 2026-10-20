@@ -93,6 +93,20 @@ describe("queue", () => {
     expect(currentId(queue)).toBe("c");
   });
 
+  it("stops when the last song is removed while current, or wraps with repeat all", () => {
+    const off = removeIds(start(ids, 3, false, "off"), new Set(["d"]));
+    expect(off.ended).toBe(true);
+    const all = removeIds(start(ids, 3, false, "all"), new Set(["d"]));
+    expect(all.ended).toBe(false);
+    expect(currentId(all.queue)).toBe("a");
+  });
+
+  it("keeps shuffle on when adding to an empty queue", () => {
+    const empty = { ...EMPTY_QUEUE, shuffle: true };
+    expect(append(empty, ["x", "y"]).shuffle).toBe(true);
+    expect(playNext(empty, ["x", "y"]).shuffle).toBe(true);
+  });
+
   it("accepts real queues and rejects corrupt saves", () => {
     expect(isValidQueue(start(ids, 2, true, "all"))).toBe(true);
     expect(isValidQueue(EMPTY_QUEUE)).toBe(true);

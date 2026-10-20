@@ -16,7 +16,16 @@ async function setup(ids: string[], withoutFile: string[] = [], patches: Record<
   player.initPlayer();
   const audio = document.querySelector("audio")!;
   const current = () => player.getNowPlaying().id;
-  const loaded = async (id: string) => vi.waitFor(() => expect(current() === id && !player.getNowPlaying().failure && audio.src.startsWith("blob:")).toBe(true));
+  // The silent unlock clip is a blob URL too, and the song hasn't loaded while it's on the element.
+  const silent = () => {
+    const { calls, results } = vi.mocked(URL.createObjectURL).mock;
+    const i = calls.findIndex(([blob]) => blob instanceof Blob && blob.type === "audio/wav");
+    return i < 0 ? null : (results[i].value as string);
+  };
+  const loaded = async (id: string) =>
+    vi.waitFor(() =>
+      expect(current() === id && !player.getNowPlaying().failure && audio.src.startsWith("blob:") && audio.src !== silent()).toBe(true),
+    );
   return { library, player, audio, current, loaded };
 }
 
@@ -28,6 +37,25 @@ describe("player", () => {
     audio.dispatchEvent(new Event("ended"));
     await loaded("b");
     expect(audio.play).toHaveBeenCalled();
+  });
+
+  it("ignores the end of the silent unlock clip", async () => {
+    const { player, audio, current, loaded } = await setup(["a", "b"]);
+    player.playTracks(["a", "b"], 0);
+    audio.dispatchEvent(new Event("ended"));
+    await loaded("a");
+    expect(current()).toBe("a");
+  });
+
+  it("pauses the previous song when the next one fails to load", async () => {
+    const { player, audio, current, loaded } = await setup(["a", "b"], ["b"]);
+    player.playTracks(["a", "b"], 0);
+    await loaded("a");
+    vi.mocked(audio.pause).mockClear();
+    player.jumpTo(1);
+    await vi.waitFor(() => expect(player.getNowPlaying().failure).not.toBeNull());
+    expect(audio.pause).toHaveBeenCalled();
+    expect(current()).toBe("b");
   });
 
   it("plays the same song again on repeat one", async () => {

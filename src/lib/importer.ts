@@ -187,6 +187,7 @@ export async function importItems(
       summary.copies.push({ path: itemPath(item), id: sameName });
       continue;
     }
+    let read: ReadTrack | undefined;
     try {
       // Checked after the name, since this reads part of the file.
       const content = await contentKey(file);
@@ -205,7 +206,7 @@ export async function importItems(
         byContent.set(content, moved.id);
         continue;
       }
-      const read = await readTrack(file, source, pendingArt);
+      read = await readTrack(file, source, pendingArt);
       read.track.contentKey = content;
       // A song with a saved cover doesn't need the one in its file. Without one, a cover that couldn't be read
       // stays in the file, the only copy of it.
@@ -220,6 +221,8 @@ export async function importItems(
       if (!read.tagged) summary.untagged++;
       if (mayNotPlay(read.track.type)) summary.unplayable.push(file.name);
     } catch (e) {
+      // A cover that never got saved mustn't stand in for the album's next song, or that song's own copy is stripped.
+      if (read?.art) pendingArt.delete(read.art.id);
       summary.failed.push(file.name);
       // Out of space: every later file would fail the same way.
       if (e instanceof DOMException && e.name === "QuotaExceededError") {

@@ -37,6 +37,12 @@ describe("backup and restore", () => {
   it("survives JSON and is found by name", () => {
     expect(parseBackup(JSON.stringify(backup))).toEqual(JSON.parse(JSON.stringify(backup)));
     expect(parseBackup('{"app":"other"}')).toBeNull();
+    const bad = { ...backup, tracks: [null, { title: "No path" }, { ...backup.tracks[0], title: { x: 1 }, addedAt: "soon" }], playlists: [{ name: "P", paths: "nope" }] };
+    const parsed = parseBackup(JSON.stringify(bad))!;
+    expect(parsed.tracks).toHaveLength(1);
+    expect(parsed.tracks[0].title).toBeUndefined();
+    expect(parsed.tracks[0].addedAt).toBeUndefined();
+    expect(parsed.playlists).toEqual([]);
     expect(isBackupFile("tunenook-backup (3).json")).toBe(true);
     expect(isBackupFile("notes.json")).toBe(false);
   });

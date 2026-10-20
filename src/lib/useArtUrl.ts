@@ -6,7 +6,10 @@ export function useArtUrl(artId: string | null): string | null {
   useEffect(() => {
     if (!artId) return;
     let live = true;
-    void artUrl(artId).then((url) => live && setLoaded({ artId, url }));
+    artUrl(artId).then(
+      (url) => live && setLoaded({ artId, url }),
+      () => live && setLoaded({ artId, url: null }),
+    );
     return () => {
       live = false;
     };

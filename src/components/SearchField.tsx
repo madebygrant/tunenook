@@ -21,8 +21,10 @@ export function SearchField({ label, value, onChange, onSubmit, className }: Pro
         onKeyDown={(e) => {
           if (e.key === "Enter") onSubmit?.();
           if (e.key !== "Escape") return;
-          if (value) onChange("");
-          else e.currentTarget.blur();
+          if (!value) return e.currentTarget.blur();
+          // Clearing is all this Escape does; an open dialog stays open.
+          e.preventDefault();
+          onChange("");
         }}
       />
       {value && (
