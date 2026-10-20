@@ -143,13 +143,13 @@ export const BrandMark = (props: SVGProps<SVGSVGElement>) => (
       className="brand-mark-left"
       fillRule="evenodd"
       transform="translate(-2 -3)"
-      d="M0 -42 A42 42 0 0 0 0 42 ZM-12 -18 A2 2 0 0 1 -8 -18 L-8 18 A2 2 0 0 1 -12 18 ZM-24 -10 A2 2 0 0 1 -20 -10 L-20 10 A2 2 0 0 1 -24 10 ZM-35 -12 A2 2 0 0 1 -31 -12 L-31 12 A2 2 0 0 1 -35 12 Z"
+      d="M0 -42 A42 42 0 0 0 0 42 ZM0 -31 A31 31 0 0 0 0 31 L0 25 A25 25 0 0 1 0 -25 ZM0 -7 A7 7 0 0 0 0 7 Z"
     />
     <path
       className="brand-mark-right"
       fillRule="evenodd"
       transform="translate(2 3)"
-      d="M0 -42 A42 42 0 0 1 0 42 ZM8 -18 A2 2 0 0 1 12 -18 L12 18 A2 2 0 0 1 8 18 ZM20 -10 A2 2 0 0 1 24 -10 L24 10 A2 2 0 0 1 20 10 ZM31 -12 A2 2 0 0 1 35 -12 L35 12 A2 2 0 0 1 31 12 Z"
+      d="M0 -42 A42 42 0 0 1 0 42 ZM0 -31 A31 31 0 0 1 0 31 L0 25 A25 25 0 0 0 0 -25 ZM0 -7 A7 7 0 0 1 0 7 Z"
     />
   </svg>
 );
