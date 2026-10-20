@@ -20,9 +20,9 @@ export default defineConfig({
         background_color: '#06080c',
         theme_color: '#06080c',
         icons: [
-          { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
-          { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' },
-          { src: 'maskable-icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          { src: 'pwa-192x192.png?v=2', sizes: '192x192', type: 'image/png' },
+          { src: 'pwa-512x512.png?v=2', sizes: '512x512', type: 'image/png' },
+          { src: 'maskable-icon-512x512.png?v=2', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
         // "Open with TuneNook" for audio files on desktop Chromium, once installed. Playlists are left out: they
         // only mean something next to their songs.
