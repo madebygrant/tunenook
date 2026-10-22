@@ -115,6 +115,10 @@ export function isUntaggedGroup(album: Album): boolean {
   return !album.tracks[0]?.album;
 }
 
+export const MIN_ALBUM_TRACKS = 3;
+
+export const isListedAlbum = (album: Album) => album.tracks.length > MIN_ALBUM_TRACKS;
+
 export function getAlbums(): Album[] {
   return dirty ? groupAlbums(getTracks()) : albums;
 }

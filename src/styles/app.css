@@ -2358,7 +2358,7 @@ b.mono {
 .install-prompt p {
   padding-top: 0;
 }
-.space-warning p + p {
+.import-preview p + p {
   margin-top: 12px;
 }
 /* Tuning dial: choices along a scale with tick marks; a lamp needle marks the one you're on. */

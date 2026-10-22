@@ -2,7 +2,7 @@ import { useDeferredValue, useMemo, useState } from "react";
 import { formatTotal, plural } from "../lib/format";
 import { findAlbumArt, needsArt, useArtLookup, type LookupResult } from "../lib/artLookup";
 import { downscale } from "../lib/importer";
-import { isUntaggedGroup, setAlbumArt, totalSeconds, useAlbums } from "../lib/library";
+import { isListedAlbum, isUntaggedGroup, MIN_ALBUM_TRACKS, setAlbumArt, totalSeconds, useAlbums } from "../lib/library";
 import { playTracks } from "../lib/player";
 import { matchesSearch, searchWords, useListPlayback } from "../lib/useListPlayback";
 import { useSelection } from "../lib/useSelection";
@@ -15,11 +15,9 @@ import { CollectionMenu, MenuSheet } from "./SongMenu";
 import { SongList } from "./SongList";
 import { Button, CoverArt } from "./ui";
 
-const MIN_ALBUM_TRACKS = 3;
-
 export function Albums({ onOpen, onAdd }: { onOpen: (key: string) => void; onAdd: () => void }) {
   const albums = useAlbums();
-  const visible = useMemo(() => albums.filter((a) => a.tracks.length > MIN_ALBUM_TRACKS), [albums]);
+  const visible = useMemo(() => albums.filter(isListedAlbum), [albums]);
   const [query, setQuery] = useState("");
   const search = useDeferredValue(query);
   const shown = useMemo(() => {

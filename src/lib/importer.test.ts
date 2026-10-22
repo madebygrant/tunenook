@@ -17,7 +17,7 @@ async function load() {
   return { library, importer };
 }
 
-describe("bytesToImport", () => {
+describe("importSize", () => {
   it("counts only new audio files", async () => {
     const { importer } = await load();
     const files = [
@@ -26,7 +26,7 @@ describe("bytesToImport", () => {
       { name: "Mix.m3u", size: 10, type: "audio/x-mpegurl" },
       { name: "cover.jpg", size: 70, type: "image/jpeg" },
     ];
-    expect(importer.bytesToImport(files, [{ sourceKey: "old.mp3\n50" }])).toBe(100);
+    expect(importer.importSize(files, [{ sourceKey: "old.mp3\n50" }])).toEqual({ songs: 1, bytes: 100 });
   });
 });
 

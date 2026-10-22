@@ -21,6 +21,7 @@ afterEach(() => {
   root = null;
   delete (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT;
   delete (window as { matchMedia?: unknown }).matchMedia;
+  delete (navigator as { storage?: unknown }).storage;
 });
 
 async function render(page: "storage" | "add", songs: number) {
@@ -57,5 +58,55 @@ describe("AddMusic", () => {
     await vi.waitFor(() => expect(headings()).toContain("Copy songs into TuneNook"));
     expect(headings()).not.toContain("Back up");
     expect(headings()).not.toContain("On this device");
+  });
+
+  // jsdom has no storage estimate, so the free space is whatever the quota says.
+  function setQuota(quota: number) {
+    const storage = { estimate: async () => ({ quota, usage: 0 }), persisted: async () => false, persist: async () => false };
+    Object.defineProperty(navigator, "storage", { value: storage, configurable: true });
+  }
+
+  async function pick(...files: File[]) {
+    const input = document.querySelector<HTMLInputElement>("input[type=file][multiple]")!;
+    Object.defineProperty(input, "files", { value: files, configurable: true });
+    await act(async () => void input.dispatchEvent(new Event("change", { bubbles: true })));
+  }
+
+  // Dialogs portal to the body, outside the page's host.
+  const dialogTitle = () => document.querySelector(".dialog-head h2")?.textContent;
+  const button = (name: string) => [...document.querySelectorAll("button")].find((b) => b.textContent === name);
+  const jobLabel = async () => (await import("../lib/job")).getJob()?.label;
+
+  it("shows the size of new songs and adds them once confirmed", async () => {
+    setQuota(10_000);
+    await render("add", 0);
+    await pick(new File(["abc"], "new.mp3", { type: "audio/mpeg" }));
+    await vi.waitFor(() => expect(dialogTitle()).toBe("Add 1 song?"));
+    expect(document.activeElement).toBe(button("Add"));
+    expect(await jobLabel()).toBeUndefined();
+    await act(async () => button("Add")!.click());
+    expect(dialogTitle()).toBeUndefined();
+    expect(await jobLabel()).toBe("Adding songs");
+  });
+
+  it("warns when the songs won't fit, with Cancel first", async () => {
+    setQuota(2);
+    await render("add", 0);
+    await pick(new File(["abc"], "new.mp3", { type: "audio/mpeg" }));
+    await vi.waitFor(() => expect(dialogTitle()).toBe("Not enough space"));
+    expect(button("Add what fits")).toBeDefined();
+    expect(document.activeElement).toBe(button("Cancel"));
+    await act(async () => button("Cancel")!.click());
+    expect(dialogTitle()).toBeUndefined();
+    expect(await jobLabel()).toBeUndefined();
+  });
+
+  it("adds a pick with no new songs without asking", async () => {
+    setQuota(10_000);
+    await render("add", 1);
+    // Same name and size as the song already here.
+    await pick(new File(["abc"], "s0.mp3", { type: "audio/mpeg" }));
+    expect(await jobLabel()).toBe("Adding songs");
+    expect(dialogTitle()).toBeUndefined();
   });
 });

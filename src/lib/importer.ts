@@ -285,9 +285,13 @@ async function importPlaylists(files: File[], summary: ImportSummary): Promise<v
 
 // Most space a pick can take. Files already here under the same name are left out; renamed copies can only be
 // spotted by reading them, so they're counted.
-export function bytesToImport(files: { name: string; size: number; type: string }[], tracks: { sourceKey: string }[]): number {
+export function importSize(
+  files: { name: string; size: number; type: string }[],
+  tracks: { sourceKey: string }[],
+): { songs: number; bytes: number } {
   const known = new Set(tracks.map((t) => t.sourceKey));
-  return files.filter((f) => isAudioFile(f) && !known.has(sourceKey(f))).reduce((sum, f) => sum + f.size, 0);
+  const fresh = files.filter((f) => isAudioFile(f) && !known.has(sourceKey(f)));
+  return { songs: fresh.length, bytes: fresh.reduce((sum, f) => sum + f.size, 0) };
 }
 
 export function importFiles(files: File[], onProgress: (p: Progress) => void, signal?: AbortSignal): Promise<ImportSummary> {

@@ -1,4 +1,4 @@
-import { isUntaggedGroup } from "./library";
+import { isListedAlbum, isUntaggedGroup } from "./library";
 import type { Album, Play, Playlist, RemovedSong, Track } from "./types";
 
 export type PartKey = "audio" | "art" | "details" | "history" | "other";
@@ -63,11 +63,11 @@ export interface Sized<T> {
   bytes: number;
 }
 
-// Only copies TuneNook holds count; songs in linked folders take no space here. Songs with no album tag aren't
-// an album, so they're left out, as on the Albums page.
+// Only copies TuneNook holds count; songs in linked folders take no space here. Albums too short for the Albums
+// page, and songs with no album tag, are left out.
 export function largestAlbums(albums: readonly Album[], limit: number): Sized<Album>[] {
   return albums
-    .filter((album) => !isUntaggedGroup(album))
+    .filter((album) => isListedAlbum(album) && !isUntaggedGroup(album))
     .map((album) => ({ item: album, bytes: audioBytes(album.tracks) }))
     .filter((a) => a.bytes > 0)
     .sort((a, b) => b.bytes - a.bytes)

@@ -46,12 +46,23 @@ describe("share", () => {
 });
 
 describe("largest", () => {
-  it("ranks albums and songs by the audio TuneNook holds, leaving out songs with no album", () => {
-    const albums = largestAlbums(groupAlbums(tracks), 5);
-    expect(albums.map((a) => [a.item.title, a.bytes])).toEqual([
-      ["Big", 800],
-      ["Small", 100],
+  it("ranks albums by the audio TuneNook holds, leaving out short albums and songs with no album", () => {
+    const album = (name: string, sizes: number[], patch = {}) =>
+      sizes.map((size, i) => makeTrack(`${name}${i}`, { album: name, size, ...patch }));
+    const list = [
+      ...album("Big", [500, 300, 100, 100]),
+      ...album("Small", [10, 10, 10, 10]),
+      ...album("Short", [900, 900, 900]),
+      ...album("Linked", [900, 900, 900, 900], { source: linked }),
+      ...Array.from({ length: 4 }, (_, i) => makeTrack(`loose${i}`, { size: 900 })),
+    ];
+    expect(largestAlbums(groupAlbums(list), 5).map((a) => [a.item.title, a.bytes])).toEqual([
+      ["Big", 1000],
+      ["Small", 40],
     ]);
+  });
+
+  it("ranks songs by the audio TuneNook holds", () => {
     expect(largestSongs(tracks, 2).map((s) => s.item.id)).toEqual(["a", "b"]);
   });
 

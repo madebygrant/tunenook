@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { canLinkFolders, copyIntoLibrary, NeedsAccessError, NotEnoughSpaceError, requestAccess, scanFolder, unlinkFolder, useGranted, linkFolder } from "../lib/folders";
 import { albumsToLookUp, findMissingArt, needsArt, setArtLookup, useArtLookup } from "../lib/artLookup";
 import { formatBytes, plural } from "../lib/format";
-import { bytesToImport, importFiles } from "../lib/importer";
+import { importFiles, importSize } from "../lib/importer";
 import { runJob, useJob } from "../lib/job";
 import { getTracks, useAlbums, useFolders, useTracks } from "../lib/library";
 import { isIOS } from "../lib/standalone";
@@ -22,7 +22,7 @@ export function AddMusic() {
   const job = useJob();
   const folders = useFolders();
   const tracks = useTracks();
-  const [spaceWarning, setSpaceWarning] = useState<{ files: File[]; needed: number; free: number } | null>(null);
+  const [preview, setPreview] = useState<{ files: File[]; songs: number; needed: number; free: number | null } | null>(null);
   const files = useRef<HTMLInputElement>(null);
   const folder = useRef<HTMLInputElement>(null);
   const [ios] = useState(() => isIOS());
@@ -33,20 +33,22 @@ export function AddMusic() {
   }, []);
 
   function startImport(picked: File[]) {
-    setSpaceWarning(null);
+    setPreview(null);
     void ensurePersistence(true);
     void runJob("Adding songs", async (onProgress, signal) => describeImport(await importFiles(picked, onProgress, signal)));
   }
 
-  // Warns before a pick that can't fit, rather than failing partway through.
+  // Shows the size first, so a pick that can't fit is caught before it fails partway through. A pick with no new
+  // songs (only playlists, a backup or copies) goes straight in.
   async function importPicked(list: FileList | null) {
     if (!list?.length) return;
     const picked = [...list];
-    const needed = bytesToImport(picked, getTracks());
-    const free = needed > 0 ? await freeBytes() : null;
-    if (free !== null && needed > free) setSpaceWarning({ files: picked, needed, free });
-    else startImport(picked);
+    const { songs, bytes } = importSize(picked, getTracks());
+    if (songs === 0) startImport(picked);
+    else setPreview({ files: picked, songs, needed: bytes, free: await freeBytes() });
   }
+
+  const tooBig = preview !== null && preview.free !== null && preview.needed > preview.free;
 
   return (
     <section aria-labelledby="add-title">
@@ -127,25 +129,30 @@ export function AddMusic() {
           </Panel>
         )}
         {tracks.length > 0 && <ArtLookupPanel busy={job?.running ?? false} />}
-        {spaceWarning && (
-          <Dialog label="Not enough space" className="space-warning" onClose={() => setSpaceWarning(null)}>
+        {preview && (
+          <Dialog label={tooBig ? "Not enough space" : "Add songs"} className="import-preview" onClose={() => setPreview(null)}>
             <div className="dialog-head">
-              <h2 className="h3">Not enough space</h2>
+              <h2 className="h3">{tooBig ? "Not enough space" : `Add ${plural(preview.songs, "song")}?`}</h2>
             </div>
             <div className="confirm">
               <div>
                 <p className="muted">
-                  These songs need up to <b className="mono">{formatBytes(spaceWarning.needed)}</b> and about{" "}
-                  <b className="mono">{formatBytes(spaceWarning.free)}</b> is free. Songs already here under another file name
-                  are only found as they're read, so they're counted in that total but won't take space.
+                  Needs up to <b className="mono">{formatBytes(preview.needed)}</b>
+                  {preview.free !== null && (
+                    <>
+                      , and about <b className="mono">{formatBytes(preview.free)}</b> is free
+                    </>
+                  )}
+                  . Embedded covers are usually stored once per album, and songs already here under another file name are
+                  skipped, so it can come to less.
                 </p>
-                <p className="muted">TuneNook will add songs until the space runs out, or you can pick fewer.</p>
+                {tooBig && <p className="muted">TuneNook will add songs until the space runs out, or you can pick fewer.</p>}
               </div>
               <div className="dialog-actions">
-                <Button variant="secondary" onClick={() => startImport(spaceWarning.files)}>
-                  Add what fits
+                <Button variant={tooBig ? "secondary" : "primary"} data-autofocus={!tooBig || undefined} onClick={() => startImport(preview.files)}>
+                  {tooBig ? "Add what fits" : "Add"}
                 </Button>
-                <Button variant="ghost" data-autofocus onClick={() => setSpaceWarning(null)}>
+                <Button variant="ghost" data-autofocus={tooBig || undefined} onClick={() => setPreview(null)}>
                   Cancel
                 </Button>
               </div>
