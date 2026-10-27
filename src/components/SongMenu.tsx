@@ -311,7 +311,7 @@ export function CollectionMenu({
     onClose();
     onToast(message);
   };
-  const items: MenuItem[] = [
+  const songItems: MenuItem[] = [
     {
       label: "Play next",
       run: () => {
@@ -327,9 +327,9 @@ export function CollectionMenu({
       },
     },
     { label: "Add to playlist…", run: () => setStep("pick") },
-    ...extraItems,
   ];
-  if (ids.some((id) => getTrack(id)?.source.kind === "copied")) items.push({ label: "Export songs…", run: () => setStep("export") });
+  if (ids.some((id) => getTrack(id)?.source.kind === "copied")) songItems.push({ label: "Export songs…", run: () => setStep("export") });
+  const items: MenuItem[] = [...(ids.length ? songItems : []), ...extraItems];
 
   return (
     <MenuSheet label={`${title} options`} title={title} subtitle={subtitle} onClose={onClose}>

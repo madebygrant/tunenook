@@ -24,7 +24,7 @@ import { playlistTracks, withInserted, withoutIndexes } from "../lib/playlists";
 import { useSelection } from "../lib/useSelection";
 import type { Playlist, Track } from "../lib/types";
 import { Dialog } from "./Dialog";
-import { ArrowLeftIcon, CheckIcon, CloseIcon, MoreIcon, PencilIcon, PlayIcon, PlusIcon, ShuffleIcon, TrashIcon } from "./icons";
+import { ArrowLeftIcon, CheckIcon, CloseIcon, MoreIcon, PlayIcon, PlusIcon, ShuffleIcon } from "./icons";
 import { SearchField } from "./SearchField";
 import { SelectableActions, SelectButton } from "./Selection";
 import { SongList } from "./SongList";
@@ -225,35 +225,11 @@ export function PlaylistPage({
         {backLabel}
       </Button>
       <div className="show-head">
-        <CoverArt artId={tracks.find((t) => t.artId)?.artId ?? null} title={playlist.name} size={120} />
+        <CoverArt artId={tracks.find((t) => t.artId)?.artId ?? null} title={playlist.name} />
         <div>
-          {renaming === null ? (
-            <h1 id="playlist-title" className="display-lg" tabIndex={-1}>
-              {playlist.name}
-            </h1>
-          ) : (
-            <form
-              className="inline-form"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void renamePlaylist(playlist.id, renaming);
-                setRenaming(null);
-              }}
-            >
-              <TextField
-                label="Playlist name"
-                autoFocus
-                value={renaming}
-                onChange={(e) => setRenaming(e.target.value)}
-                onKeyDown={(e) => e.key === "Escape" && setRenaming(null)}
-                suffix={
-                  <Button type="submit" variant="secondary" icon={<CheckIcon />}>
-                    Save
-                  </Button>
-                }
-              />
-            </form>
-          )}
+          <h1 id="playlist-title" className="display-lg" tabIndex={-1}>
+            {playlist.name}
+          </h1>
           <div className="count">
             {plural(tracks.length, "song")}
             {tracks.length > 0 && ` · ${formatTotal(totalSeconds(tracks))}`}
@@ -279,15 +255,8 @@ export function PlaylistPage({
               variant="ghost"
               icon={<MoreIcon />}
               aria-label={`More for ${playlist.name}`}
-              disabled={!ids.length}
               onClick={() => setMenuOpen(true)}
             />
-            <Button small variant="ghost" icon={<PencilIcon />} onClick={() => setRenaming(playlist.name)}>
-              Rename
-            </Button>
-            <Button small variant="ghost" icon={<TrashIcon />} onClick={() => setConfirming(true)}>
-              Delete
-            </Button>
           </SelectableActions>
         </div>
       </div>
@@ -313,18 +282,66 @@ export function PlaylistPage({
           ids={ids}
           excludePlaylistId={playlist.id}
           extraItems={[
+            ...(tracks.length
+              ? [
+                  {
+                    label: "Export as .m3u8",
+                    run: () => {
+                      setMenuOpen(false);
+                      const text = toM3u(tracks.map((t) => ({ path: trackPath(t), title: t.title, artist: t.artist, duration: t.duration })));
+                      download(new Blob([text], { type: "audio/x-mpegurl" }), `${safeFileName(playlist.name)}.m3u8`);
+                    },
+                  },
+                ]
+              : []),
             {
-              label: "Export as .m3u8",
+              group: "manage",
+              label: "Rename",
               run: () => {
                 setMenuOpen(false);
-                const text = toM3u(tracks.map((t) => ({ path: trackPath(t), title: t.title, artist: t.artist, duration: t.duration })));
-                download(new Blob([text], { type: "audio/x-mpegurl" }), `${safeFileName(playlist.name)}.m3u8`);
+                setRenaming(playlist.name);
+              },
+            },
+            {
+              group: "manage",
+              label: "Delete playlist",
+              danger: true,
+              run: () => {
+                setMenuOpen(false);
+                setConfirming(true);
               },
             },
           ]}
           onClose={() => setMenuOpen(false)}
           onToast={onToast}
         />
+      )}
+      {renaming !== null && (
+        <Dialog label="Rename playlist" onClose={() => setRenaming(null)}>
+          <div className="dialog-head">
+            <h2 className="h3">Rename playlist</h2>
+          </div>
+          <form
+            className="inline-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void renamePlaylist(playlist.id, renaming);
+              setRenaming(null);
+            }}
+          >
+            <TextField
+              label="Playlist name"
+              data-autofocus
+              value={renaming}
+              onChange={(e) => setRenaming(e.target.value)}
+              suffix={
+                <Button type="submit" variant="secondary" icon={<CheckIcon />}>
+                  Save
+                </Button>
+              }
+            />
+          </form>
+        </Dialog>
       )}
       {confirming && (
         <Dialog label="Delete playlist" onClose={() => setConfirming(false)}>
