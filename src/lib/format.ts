@@ -39,3 +39,7 @@ export function initials(title: string): string {
     .filter((ch): ch is string => ch !== undefined);
   return letters.slice(0, 2).join("").toUpperCase() || "?";
 }
+
+export function albumNote(album: { artist: string; year: number | null }): string {
+  return album.year ? `${album.artist} · ${album.year}` : album.artist;
+}

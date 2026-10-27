@@ -1,15 +1,17 @@
 import { useEffect, useRef, type ReactNode } from "react";
-import { useCloseOnBack } from "../lib/history";
-import { AddMusicIcon, AlbumIcon, ArtistIcon, BrandMark, CloseIcon, PlaylistIcon, QueueIcon, ReviewIcon, SongsIcon, StorageIcon } from "./icons";
+import { hasOrigin, useCloseOnBack } from "../lib/history";
+import { useHasFavourites } from "../lib/library";
+import { AddMusicIcon, AlbumIcon, ArtistIcon, BrandMark, CloseIcon, HomeIcon, PlaylistIcon, QueueIcon, ReviewIcon, SongsIcon, StorageIcon } from "./icons";
 
 export type View =
+  | { kind: "home" }
   | { kind: "songs" }
   | { kind: "albums" }
   | { kind: "album"; key: string; from?: View }
   | { kind: "artists" }
   | { kind: "artist"; key: string; from?: View }
   | { kind: "playlists" }
-  | { kind: "playlist"; id: string }
+  | { kind: "playlist"; id: string; from?: View }
   | { kind: "liked" }
   | { kind: "queue" }
   | { kind: "review" }
@@ -29,6 +31,7 @@ const FOCUSABLE = "button:not([disabled]), a[href]";
 const DOCK_FOCUSABLE = ".player-dock button:not([disabled]), .player-dock a[href]";
 
 const ITEMS: { kind: View["kind"]; label: string; icon: ReactNode; also?: View["kind"][] }[] = [
+  { kind: "home", label: "Home", icon: <HomeIcon /> },
   { kind: "albums", label: "Albums", icon: <AlbumIcon />, also: ["album"] },
   { kind: "playlists", label: "Playlists", icon: <PlaylistIcon />, also: ["playlist", "liked"] },
   { kind: "songs", label: "Songs", icon: <SongsIcon /> },
@@ -41,6 +44,8 @@ const ITEMS: { kind: View["kind"]; label: string; icon: ReactNode; also?: View["
 
 export function Sidebar({ view, onNavigate, drawer, open, onClose, onShortcuts }: Props) {
   const nav = useRef<HTMLElement>(null);
+  // Kept on Home and on pages opened from it, whose back buttons lead there, after the last favourite goes.
+  const showHome = useHasFavourites() || view.kind === "home" || (hasOrigin(view) && view.from?.kind === "home");
   const modal = drawer && open;
   useCloseOnBack(onClose, modal);
 
@@ -77,7 +82,7 @@ export function Sidebar({ view, onNavigate, drawer, open, onClose, onShortcuts }
           <CloseIcon />
         </button>
       </div>
-      {ITEMS.map(({ kind, label, icon, also }) => {
+      {ITEMS.filter((item) => item.kind !== "home" || showHome).map(({ kind, label, icon, also }) => {
         const active = view.kind === kind || also?.includes(view.kind) === true;
         return (
           <button

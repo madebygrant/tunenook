@@ -40,7 +40,7 @@ Items:
 
 Exit criterion: standard check passes. In the browser, favourite an album and a playlist and reload. Both hearts are still filled.
 
-## Wave 3: Home page
+## Wave 3: Home page [done 2026-10-27]
 
 Goal: once a favourite exists, the app opens on a Home page that shows them.
 

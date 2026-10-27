@@ -1,5 +1,5 @@
 import { useDeferredValue, useMemo, useState } from "react";
-import { formatTotal, plural } from "../lib/format";
+import { albumNote, formatTotal, plural } from "../lib/format";
 import { findAlbumArt, needsArt, useArtLookup, type LookupResult } from "../lib/artLookup";
 import { downscale } from "../lib/importer";
 import {
@@ -62,7 +62,7 @@ export function Albums({ onOpen, onAdd }: { onOpen: (key: string) => void; onAdd
           ) : (
             <ul className="xh-shows tiles">
               {shown.map((a) => (
-                <AlbumTile key={a.key} album={a} note={a.year ? `${a.artist} · ${a.year}` : a.artist} onOpen={onOpen} />
+                <AlbumTile key={a.key} album={a} note={albumNote(a)} onOpen={onOpen} />
               ))}
             </ul>
           )}

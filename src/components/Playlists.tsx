@@ -20,7 +20,7 @@ import { toM3u, trackPath } from "../lib/m3u";
 import { playTracks } from "../lib/player";
 import { matchesSearch, searchWords, useListPlayback } from "../lib/useListPlayback";
 import { movePlaylistRow, visiblePositions } from "../lib/playlistMoves";
-import { withInserted, withoutIndexes } from "../lib/playlists";
+import { playlistTracks, withInserted, withoutIndexes } from "../lib/playlists";
 import { useSelection } from "../lib/useSelection";
 import type { Playlist, Track } from "../lib/types";
 import { Dialog } from "./Dialog";
@@ -31,11 +31,7 @@ import { SongList } from "./SongList";
 import { CollectionMenu, Confirm } from "./SongMenu";
 import { Button, CoverArt, FavouriteButton, TextField } from "./ui";
 
-function playlistTracks(p: Playlist, byId: Map<string, Track>): Track[] {
-  return p.trackIds.map((id) => byId.get(id)).filter((t): t is Track => t !== undefined);
-}
-
-function PlaylistTile({ name, tracks, onOpen }: { name: string; tracks: Track[]; onOpen: () => void }) {
+export function PlaylistTile({ name, tracks, onOpen }: { name: string; tracks: Track[]; onOpen: () => void }) {
   return (
     <li className="xh-show">
       <button className="show-open" onClick={onOpen}>
@@ -177,11 +173,13 @@ export function LikedPage({
 
 export function PlaylistPage({
   id,
+  backLabel,
   onBack,
   onMore,
   onToast,
 }: {
   id: string;
+  backLabel: string;
   onBack: () => void;
   // index is the song's position in the playlist; row is its place among the songs shown.
   onMore: (track: Track, index: number, row: number) => void;
@@ -202,7 +200,7 @@ export function PlaylistPage({
     return (
       <section>
         <Button variant="ghost" className="back" icon={<ArrowLeftIcon />} onClick={onBack}>
-          Playlists
+          {backLabel}
         </Button>
         <p className="lead muted">This playlist was deleted.</p>
       </section>
@@ -224,7 +222,7 @@ export function PlaylistPage({
   return (
     <section aria-labelledby="playlist-title">
       <Button variant="ghost" className="back" icon={<ArrowLeftIcon />} onClick={onBack}>
-        Playlists
+        {backLabel}
       </Button>
       <div className="show-head">
         <CoverArt artId={tracks.find((t) => t.artId)?.artId ?? null} title={playlist.name} size={120} />

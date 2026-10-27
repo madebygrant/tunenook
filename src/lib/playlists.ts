@@ -1,4 +1,4 @@
-import type { Playlist } from "./types";
+import type { Playlist, Track } from "./types";
 
 export function newPlaylist(id: string, name: string, trackIds: string[], now: number): Playlist {
   return { id, name: name.trim() || "Untitled playlist", trackIds, createdAt: now, updatedAt: now };
@@ -42,4 +42,8 @@ export function moved(p: Playlist, from: number, to: number, now: number): Playl
   const [id] = trackIds.splice(from, 1);
   trackIds.splice(to, 0, id);
   return { ...p, trackIds, updatedAt: now };
+}
+
+export function playlistTracks(p: Playlist, byId: Map<string, Track>): Track[] {
+  return p.trackIds.map((id) => byId.get(id)).filter((t): t is Track => t !== undefined);
 }

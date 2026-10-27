@@ -1,9 +1,9 @@
 import { useEffect, useRef, type RefObject } from "react";
 import type { View } from "../components/Sidebar";
 
-// Where the app opens, and where an unknown address lands. Keep it the first item in the side menu.
+// Where the app opens with no favourites, and where an unknown address lands.
 export const START_VIEW: View = { kind: "albums" };
-const PLAIN_KINDS = new Set<string>(["songs", "albums", "artists", "playlists", "liked", "queue", "review", "add", "storage"] satisfies View["kind"][]);
+const PLAIN_KINDS = new Set<string>(["home", "songs", "albums", "artists", "playlists", "liked", "queue", "review", "add", "storage"] satisfies View["kind"][]);
 
 export function viewHash(view: View): string {
   if (view.kind === "album" || view.kind === "artist") return `#/${view.kind}/${encodeURIComponent(view.key)}`;
@@ -27,21 +27,26 @@ export function viewFromHash(hash: string): View | null {
   return null;
 }
 
-// Albums and artists remember the view they were opened from, so their back buttons can return there.
+type OpenedView = Extract<View, { from?: View }>;
+
+export const hasOrigin = (view: View): view is OpenedView => view.kind === "album" || view.kind === "artist" || view.kind === "playlist";
+
+// Albums, artists and playlists remember the view they were opened from, so their back buttons can return there.
 function entryState(view: View): { from: string } | null {
-  return (view.kind === "album" || view.kind === "artist") && view.from ? { from: viewHash(view.from) } : null;
+  return hasOrigin(view) && view.from ? { from: viewHash(view.from) } : null;
 }
 
-// An empty library opens on Add music; otherwise the address the app was left at, or the start page.
-export function launchView(empty: boolean): View {
-  return empty ? { kind: "add" } : (currentView() ?? START_VIEW);
+// An empty library opens on Add music; otherwise the address the app was left at, then Home once there are
+// favourites, then the start page.
+export function launchView(empty: boolean, favourites = false): View {
+  return empty ? { kind: "add" } : (currentView() ?? (favourites ? { kind: "home" } : START_VIEW));
 }
 
 export function currentView(): View | null {
   const view = viewFromHash(location.hash);
   const from = (history.state as { from?: unknown } | null)?.from;
   const origin = typeof from === "string" ? viewFromHash(from) : null;
-  return (view?.kind === "album" || view?.kind === "artist") && origin ? { ...view, from: origin } : view;
+  return view && hasOrigin(view) && origin ? { ...view, from: origin } : view;
 }
 
 // Each open sheet owns a same-URL history entry, so Back closes it.

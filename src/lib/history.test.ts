@@ -3,6 +3,7 @@ import type { View } from "../components/Sidebar";
 import { launchView, onViewPop, openLayer, pushView, viewFromHash, viewHash } from "./history";
 
 const VIEWS: View[] = [
+  { kind: "home" },
   { kind: "songs" },
   { kind: "albums" },
   { kind: "album", key: "ac/dc\nback in black" },
@@ -39,6 +40,14 @@ describe("launchView", () => {
     history.replaceState(null, "", "#/queue");
     expect(launchView(false)).toEqual({ kind: "queue" });
     expect(launchView(true)).toEqual({ kind: "add" });
+  });
+
+  it("opens on Home with no address once there are favourites", () => {
+    history.replaceState(null, "", "#");
+    expect(launchView(false, true)).toEqual({ kind: "home" });
+    history.replaceState(null, "", "#/queue");
+    expect(launchView(false, true)).toEqual({ kind: "queue" });
+    expect(launchView(true, true)).toEqual({ kind: "add" });
   });
 });
 
@@ -163,5 +172,15 @@ describe("album origin", () => {
     history.back();
     await settle();
     expect(currentView()).toEqual({ kind: "album", key: "queen\nqueen ii", from: { kind: "artist", key: "queen" } });
+  });
+});
+
+describe("playlist origin", () => {
+  it("keeps the view a playlist was opened from in its entry", async () => {
+    const { currentView } = await import("./history");
+    history.replaceState(null, "", "#/home");
+    pushView({ kind: "playlist", id: "mix", from: { kind: "home" } });
+    await settle();
+    expect(currentView()).toEqual({ kind: "playlist", id: "mix", from: { kind: "home" } });
   });
 });

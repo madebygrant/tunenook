@@ -100,6 +100,12 @@ export const QueueIcon = (props: SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+export const HomeIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 16 16" {...base} {...props}>
+    <path d="M2 7.5 8 2.5l6 5M3.5 6.25V13.5h9V6.25M6.5 13.5v-4h3v4" />
+  </svg>
+);
+
 export const ReviewIcon = (props: SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 16 16" {...base} {...props}>
     <path d="M2 14h12M4 14V9M8 14V3M12 14V7" />
