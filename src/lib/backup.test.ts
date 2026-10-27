@@ -32,7 +32,7 @@ describe("backup and restore", () => {
     { id: "p3", trackId: "a", at: 9 },
   ];
   const removed = new Map([["gone", { id: "gone", title: "Old", artist: "Band", album: "", albumArtist: "Band", removedAt: 8 }]]);
-  const backup = buildBackup(before, [playlist("Mix", ["b", "a", "b"])], backupPaths(before), 100, { plays, removed });
+  const backup = buildBackup(before, [playlist("Mix", ["b", "a", "b"])], backupPaths(before), 100, { plays, removed, favouriteAlbums: new Map() });
 
   it("survives JSON and is found by name", () => {
     expect(parseBackup(JSON.stringify(backup))).toEqual(JSON.parse(JSON.stringify(backup)));
@@ -77,7 +77,7 @@ describe("backup and restore", () => {
   it("does nothing when the import brought none of the backup's songs, as when a linked folder is rescanned", () => {
     const after = [makeTrack("old", { path: "Album/01 One.mp3", title: "One" }), makeTrack("new", { path: "Other/x.mp3" })];
     const plan = restorePlan(backup, after, new Set(["new"]));
-    expect(plan).toEqual({ tags: new Map(), stats: new Map(), plays: [], removed: [], playlists: [] });
+    expect(plan).toEqual({ tags: new Map(), stats: new Map(), plays: [], removed: [], playlists: [], favouriteAlbums: [] });
   });
 
   it("treats hand-edited play lists that aren't lists of numbers as no plays", () => {
@@ -159,5 +159,71 @@ describe("restorePlan with copies", () => {
     const plan = restorePlan(backup, [existing], new Set(), [{ path: "Backup/Album/01 One.mp3", id: "old" }]);
     expect(plan.stats.size).toBe(0);
     expect(plan.playlists).toEqual([{ name: "Mix", ids: ["old"], missing: 0 }]);
+  });
+});
+
+describe("favourites in backups", () => {
+  const songs = [
+    makeTrack("a", { path: "Album/01 One.mp3", album: "Album" }),
+    makeTrack("b", { path: "Album/02 Two.mp3", album: "Album" }),
+  ];
+  const restored = () => [
+    makeTrack("x", { path: "Backup/Album/01 One.mp3", album: "Album" }),
+    makeTrack("y", { path: "Backup/Album/02 Two.mp3", album: "Album" }),
+  ];
+
+  it("brings back favourite playlists and albums with their times", async () => {
+    const library = await import("./library");
+    const { restoreBackup } = await import("./backup");
+    const lists = [{ ...playlist("Mix", ["a", "b"]), favouredAt: 4 }, playlist("Other", ["b"])];
+    const saved = buildBackup(songs, lists, backupPaths(songs), 100, { plays: [], removed: new Map(), favouriteAlbums: new Map([["album", 3]]) });
+    const backup = parseBackup(JSON.stringify(saved))!;
+    await library.loadLibrary();
+    for (const track of restored()) await library.addTrack({ track });
+    await restoreBackup(backup, new Set(["x", "y"]));
+    expect(library.getPlaylists().map((p) => [p.name, p.favouredAt])).toEqual([
+      ["Mix", 4],
+      ["Other", undefined],
+    ]);
+    expect(library.getFavouriteAlbums()).toEqual(new Map([["album", 3]]));
+  });
+
+  it("restores a backup made before favourites, and drops hand-edited favourites of the wrong shape", async () => {
+    const library = await import("./library");
+    const { restoreBackup } = await import("./backup");
+    const old = JSON.parse(JSON.stringify(buildBackup(songs, [playlist("Mix", ["a"])], backupPaths(songs), 100))) as Record<string, unknown>;
+    delete old.favouriteAlbums;
+    old.playlists = [{ name: "Mix", paths: ["Album/01 One.mp3"], favouredAt: "yes" }];
+    const backup = parseBackup(JSON.stringify(old))!;
+    expect(parseBackup(JSON.stringify({ ...old, favouriteAlbums: [{ key: "album" }, "album", { key: 1, at: 2 }] }))!.favouriteAlbums).toEqual([]);
+    await library.loadLibrary();
+    for (const track of restored()) await library.addTrack({ track });
+    expect((await restoreBackup(backup, new Set(["x", "y"]))).playlists).toBe(1);
+    expect(library.getPlaylists()[0].favouredAt).toBeUndefined();
+    expect(library.getFavouriteAlbums().size).toBe(0);
+  });
+
+  it("favourites only albums the restore brought songs back to", async () => {
+    const library = await import("./library");
+    const { restoreBackup } = await import("./backup");
+    const favourites = new Map([["album", 3], ["other", 2]]);
+    const saved = buildBackup(songs, [], backupPaths(songs), 100, { plays: [], removed: new Map(), favouriteAlbums: favourites });
+    await library.loadLibrary();
+    await library.addTrack({ track: makeTrack("o", { path: "Elsewhere/Other.mp3", album: "Other" }) });
+    for (const track of restored()) await library.addTrack({ track });
+    await restoreBackup(parseBackup(JSON.stringify(saved))!, new Set(["x", "y"]));
+    expect(library.getFavouriteAlbums()).toEqual(new Map([["album", 3]]));
+  });
+
+  it("leaves an album unfavourited since the backup alone when the backup folder is added again", async () => {
+    const library = await import("./library");
+    const { restoreBackup } = await import("./backup");
+    const saved = buildBackup(songs, [], backupPaths(songs), 100, { plays: [], removed: new Map(), favouriteAlbums: new Map([["album", 3]]) });
+    await library.loadLibrary();
+    for (const track of restored()) await library.addTrack({ track });
+    // Picked again, the files are skipped as copies of the songs already here.
+    const copies = [{ path: "Backup/Album/01 One.mp3", id: "x" }, { path: "Backup/Album/02 Two.mp3", id: "y" }];
+    await restoreBackup(parseBackup(JSON.stringify(saved))!, new Set(), copies);
+    expect(library.getFavouriteAlbums().size).toBe(0);
   });
 });

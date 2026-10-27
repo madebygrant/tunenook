@@ -8,10 +8,13 @@ import {
   createPlaylist,
   editTracks,
   getPlays,
+  getFavouriteAlbums,
   getPlaylists,
   getRemovedSongs,
   getTracks,
+  restoreFavouriteAlbums,
   storedFile,
+  trackAlbumKey,
   updateTracks,
   type RemovedHistory,
   type TagEdit,
@@ -21,7 +24,7 @@ import { toM3u, trackPath } from "./m3u";
 import { slimAudio, withCoverArt } from "./slim";
 import { names } from "./summary";
 import { sourceSize } from "./tags";
-import type { Play, Playlist, RemovedSong, Track } from "./types";
+import type { FavouriteAlbum, Play, Playlist, RemovedSong, Track } from "./types";
 import { zip } from "./zip";
 
 export const BACKUP_FILE = "tunenook-backup.json";
@@ -60,20 +63,23 @@ export interface Backup {
   version: 1;
   exportedAt: number;
   tracks: BackupTrack[];
-  playlists: { name: string; paths: string[] }[];
+  playlists: { name: string; paths: string[]; favouredAt?: number }[];
   // Removed songs that still have plays in the log. Backups from before the play log have none.
   removed?: BackupRemoved[];
+  // By album key, which the restored tags rebuild. Backups from before favourites have none.
+  favouriteAlbums?: FavouriteAlbum[];
 }
 
 export interface History {
   plays: readonly Play[];
   removed: ReadonlyMap<string, RemovedSong>;
+  favouriteAlbums: ReadonlyMap<string, number>;
 }
 
-const NO_HISTORY: History = { plays: [], removed: new Map() };
+const NO_HISTORY: History = { plays: [], removed: new Map(), favouriteAlbums: new Map() };
 
 function currentHistory(): History {
-  return { plays: getPlays(), removed: getRemovedSongs() };
+  return { plays: getPlays(), removed: getRemovedSongs(), favouriteAlbums: getFavouriteAlbums() };
 }
 
 export function withNumber(name: string, n: number): string {
@@ -135,11 +141,13 @@ export function buildBackup(
         const t = byId.get(id);
         return t ? [pathOf(t)] : [];
       }),
+      favouredAt: p.favouredAt,
     })),
     removed: [...history.removed.values()].flatMap((s) => {
       const plays = playsOf.get(s.id);
       return plays ? [{ title: s.title, artist: s.artist, album: s.album, albumArtist: s.albumArtist, removedAt: s.removedAt, plays }] : [];
     }),
+    favouriteAlbums: [...history.favouriteAlbums].map(([key, at]) => ({ key, at })),
   };
 }
 
@@ -177,9 +185,17 @@ function cleanTrack(value: unknown): BackupTrack | null {
 
 function cleanPlaylist(value: unknown): Backup["playlists"][number] | null {
   if (!value || typeof value !== "object") return null;
-  const { name, paths } = value as Record<string, unknown>;
+  const { name, paths, favouredAt } = value as Record<string, unknown>;
   if (!isText(name) || !Array.isArray(paths)) return null;
-  return { ...value, name, paths: paths.filter(isText) };
+  return { ...value, name, paths: paths.filter(isText), favouredAt: isNumber(favouredAt) ? favouredAt : undefined };
+}
+
+function cleanFavouriteAlbums(value: unknown): FavouriteAlbum[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((f: unknown) => {
+    const { key, at } = (f && typeof f === "object" ? f : {}) as Record<string, unknown>;
+    return isText(key) && isNumber(at) ? [{ key, at }] : [];
+  });
 }
 
 export function parseBackup(text: string): Backup | null {
@@ -188,7 +204,7 @@ export function parseBackup(text: string): Backup | null {
     if (data.app !== "tunenook" || data.version !== 1 || !Array.isArray(data.tracks) || !Array.isArray(data.playlists)) return null;
     const tracks = data.tracks.flatMap((t) => cleanTrack(t) ?? []);
     const playlists = data.playlists.flatMap((p) => cleanPlaylist(p) ?? []);
-    return { ...data, tracks, playlists } as Backup;
+    return { ...data, tracks, playlists, favouriteAlbums: cleanFavouriteAlbums(data.favouriteAlbums) } as Backup;
   } catch {
     return null;
   }
@@ -199,7 +215,8 @@ export interface RestorePlan {
   stats: Map<string, Partial<Track>>;
   plays: { trackId: string; at: number }[];
   removed: RemovedHistory[];
-  playlists: { name: string; ids: string[]; missing: number }[];
+  playlists: { name: string; ids: string[]; missing: number; favouredAt?: number }[];
+  favouriteAlbums: FavouriteAlbum[];
 }
 
 // Backup files can be edited by hand, so anything that isn't a list of numbers counts as no plays.
@@ -240,7 +257,9 @@ export function restorePlan(
   const copied = new Set(copies.map((c) => c.path));
   let picked = 0;
   const idByPath = new Map<string, string>();
-  const plan: RestorePlan = { tags: new Map(), stats: new Map(), plays: [], removed: [], playlists: [] };
+  // Albums holding songs this restore brings back, under the tags they'll have once it's done.
+  const restoredAlbums = new Set<string>();
+  const plan: RestorePlan = { tags: new Map(), stats: new Map(), plays: [], removed: [], playlists: [], favouriteAlbums: [] };
   for (const saved of backup.tracks) {
     const want = segments(saved.path);
     const options = (byName.get(want.at(-1) ?? "") ?? []).filter(
@@ -254,6 +273,7 @@ export function restorePlan(
     if (!fresh.has(t.id) || plan.stats.has(t.id)) continue;
     const changed = TAGS.filter((k) => saved[k] !== undefined && saved[k] !== t[k]);
     if (changed.length) plan.tags.set(t.id, Object.fromEntries(changed.map((k) => [k, saved[k]])));
+    restoredAlbums.add(trackAlbumKey({ ...t, ...plan.tags.get(t.id) }));
     plan.stats.set(t.id, { addedAt: saved.addedAt ?? t.addedAt, likedAt: saved.likedAt, playCount: saved.playCount, lastPlayedAt: saved.lastPlayedAt });
     for (const at of times(saved.plays)) plan.plays.push({ trackId: t.id, at });
   }
@@ -267,8 +287,11 @@ export function restorePlan(
   });
   for (const p of backup.playlists) {
     const found = p.paths.flatMap((path) => idByPath.get(path) ?? []);
-    plan.playlists.push({ name: p.name, ids: found, missing: p.paths.length - found.length });
+    plan.playlists.push({ name: p.name, ids: found, missing: p.paths.length - found.length, favouredAt: p.favouredAt });
   }
+  // Only albums this restore brought songs back to, so one here that shares a name, or was unfavourited since, stays
+  // as it is.
+  plan.favouriteAlbums = (backup.favouriteAlbums ?? []).filter((f) => restoredAlbums.has(f.key));
   return plan;
 }
 
@@ -287,12 +310,14 @@ export async function restoreBackup(
   if (plan.stats.size) await updateTracks(plan.stats, { now: true, failure: "Couldn't restore likes and play counts." });
   if (plan.plays.length) await addPlays(plan.plays, "Couldn't restore the dates of past plays.");
   if (plan.removed.length) await addRemovedHistory(plan.removed, "Couldn't restore the history of removed songs.");
+  if (plan.favouriteAlbums.length) await restoreFavouriteAlbums(plan.favouriteAlbums, "Couldn't restore your favourite albums.");
   let playlists = 0;
   let missing = 0;
   for (const p of plan.playlists) {
     missing += p.missing;
+    // A playlist already here keeps its own favourite.
     if (p.ids.length === 0 || hasPlaylist(p.name, p.ids)) continue;
-    if (await createPlaylist(p.name, p.ids)) playlists++;
+    if (await createPlaylist(p.name, p.ids, p.favouredAt)) playlists++;
   }
   return { restored: plan.stats.size, playlists, missing };
 }

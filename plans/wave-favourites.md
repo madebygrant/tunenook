@@ -62,7 +62,7 @@ Exit criterion: standard check passes. In the browser with the chrome-devtools M
 - With one favourite, a fresh load opens Home with its tile, and Home is first in the sidebar.
 - Removing the last favourite and reloading opens Albums, with no Home item.
 
-## Wave 4: favourites in backups
+## Wave 4: favourites in backups [done 2026-10-27]
 
 Goal: a backup and restore keeps favourites.
 

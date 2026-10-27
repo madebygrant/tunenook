@@ -384,6 +384,10 @@ export function useArtists(): Artist[] {
   return useSyncExternalStore(subscribe, () => artists);
 }
 
+export function getFavouriteAlbums(): ReadonlyMap<string, number> {
+  return favouriteAlbums;
+}
+
 export function useFavouriteAlbums(): Album[] {
   const list = useAlbums();
   const favourites = useSyncExternalStore(subscribe, () => favouriteAlbums);
@@ -704,6 +708,25 @@ export async function recordPlay(id: string): Promise<void> {
   if (saved) logged([play]);
 }
 
+// For restores. Albums already favourited keep their own time, and an album with no songs here is skipped, as
+// removing an album's last song drops its favourite.
+export function restoreFavouriteAlbums(entries: FavouriteAlbum[], failure: string): Promise<boolean> {
+  return queueTrackWrite(async () => {
+    const here = new Set([...store.values()].map(trackAlbumKey));
+    const changes = entries.filter((e) => !favouriteAlbums.has(e.key) && here.has(e.key)).map((e): FavouriteChange => [e.key, e.at]);
+    if (changes.length === 0) return true;
+    try {
+      await write(favouriteWrites(changes));
+    } catch (e) {
+      reportError(failure, e);
+      return false;
+    }
+    applyFavourites(changes);
+    emit();
+    return true;
+  });
+}
+
 // For restores. Queued with song writes, so plays can't be added for a song removed just before.
 export function addPlays(entries: Omit<Play, "id">[], failure: string): Promise<boolean> {
   return queueTrackWrite(async () => {
@@ -852,8 +875,9 @@ export async function addToPlaylist(id: string, trackIds: string[]): Promise<boo
   return p ? savePlaylist(withTracks(p, trackIds, Date.now())) : false;
 }
 
-export async function createPlaylist(name: string, trackIds: string[] = []): Promise<Playlist | null> {
-  const playlist = newPlaylist(crypto.randomUUID(), name, trackIds, Date.now());
+export async function createPlaylist(name: string, trackIds: string[] = [], favouredAt?: number): Promise<Playlist | null> {
+  const created = newPlaylist(crypto.randomUUID(), name, trackIds, Date.now());
+  const playlist = favouredAt === undefined ? created : { ...created, favouredAt };
   return (await savePlaylist(playlist)) ? playlist : null;
 }
 
