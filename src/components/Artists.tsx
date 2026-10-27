@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { formatTotal, plural } from "../lib/format";
-import { totalSeconds, useArtists } from "../lib/library";
+import { isListedArtist, totalSeconds, useArtists } from "../lib/library";
 import { playTracks } from "../lib/player";
 import { searchWords, useListPlayback } from "../lib/useListPlayback";
 import { useSelection } from "../lib/useSelection";
@@ -18,9 +18,11 @@ function counts(albums: number, songs: number): string {
 
 export function Artists({ onOpen, onAdd }: { onOpen: (key: string) => void; onAdd: () => void }) {
   const artists = useArtists();
+  const listed = useMemo(() => artists.filter(isListedArtist), [artists]);
   const [query, setQuery] = useState("");
   const words = searchWords(query);
-  const shown = artists.filter((a) => words.every((w) => a.key.includes(w)));
+  // Search still finds guests, who are left off the grid.
+  const shown = words.length === 0 ? listed : artists.filter((a) => words.every((w) => a.key.includes(w)));
 
   return (
     <section aria-labelledby="artists-title">
@@ -28,7 +30,7 @@ export function Artists({ onOpen, onAdd }: { onOpen: (key: string) => void; onAd
         <h1 id="artists-title" className="display-lg" tabIndex={-1}>
           Artists
         </h1>
-        {artists.length > 0 && <span className="count">{plural(artists.length, "artist")}</span>}
+        {listed.length > 0 && <span className="count">{plural(listed.length, "artist")}</span>}
       </div>
       {artists.length === 0 ? (
         <div className="empty">
@@ -43,7 +45,9 @@ export function Artists({ onOpen, onAdd }: { onOpen: (key: string) => void; onAd
           <div className="list-tools">
             <SearchField label="Search artists" value={query} onChange={setQuery} />
           </div>
-          {shown.length === 0 ? (
+          {words.length === 0 && shown.length === 0 ? (
+            <p className="list-empty muted">Only guest artists so far. Search to find them.</p>
+          ) : shown.length === 0 ? (
             <p className="list-empty muted">No artists match “{query}”.</p>
           ) : (
             <ul className="xh-shows tiles">

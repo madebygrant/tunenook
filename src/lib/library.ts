@@ -127,6 +127,11 @@ export function artistKey(name: string): string {
   return name.toLowerCase();
 }
 
+// Artists who only turn up on someone else's album or song are guests and stay off the grid.
+export function isListedArtist(artist: Artist): boolean {
+  return artist.albums.length > 0 || artist.songs.some((t) => artistKey(t.albumArtist || t.artist) === artist.key);
+}
+
 export function artistPageFor(t: Pick<Track, "artist">): string | null {
   const key = artistKey(t.artist);
   return artistKeys.has(key) ? key : null;

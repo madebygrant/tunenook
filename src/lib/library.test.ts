@@ -312,6 +312,17 @@ describe("groupArtists", () => {
     expect(guest.appearsOn[0].tracks.map((t) => t.id)).toEqual(["a", "b"]);
     expect(guest.tracks.map((t) => t.id)).toEqual(["b"]);
   });
+
+  it("lists only artists who own an album or a song", async () => {
+    const { groupAlbums, groupArtists, isListedArtist } = await import("./library");
+    const tracks = [
+      makeTrack("hits", { artist: "Blondie", albumArtist: "Various artists", album: "Hits" }),
+      makeTrack("feat", { artist: "Queen feat. Bowie", albumArtist: "Queen", album: "" }),
+      makeTrack("loose", { artist: "Abba", albumArtist: "", album: "" }),
+    ];
+    const listed = groupArtists(groupAlbums(tracks)).filter(isListedArtist);
+    expect(listed.map((a) => a.name)).toEqual(["Abba", "Queen", "Various artists"]);
+  });
 });
 
 describe("editTracks", () => {
