@@ -43,3 +43,39 @@ export function freshEnvironment(): void {
   HTMLMediaElement.prototype.load = vi.fn();
   HTMLMediaElement.prototype.canPlayType = vi.fn(() => "maybe" as CanPlayTypeResult);
 }
+
+// Renders hook in a bare component, passing each value it returns to seen, until stop.
+export async function probeHook<T>(hook: () => T, seen: (value: T) => void) {
+  const { createRoot } = await import("react-dom/client");
+  const { act, createElement } = await import("react");
+  const env = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+  env.IS_REACT_ACT_ENVIRONMENT = true;
+  const root = createRoot(document.createElement("div"));
+  function Probe() {
+    seen(hook());
+    return null;
+  }
+  try {
+    act(() => root.render(createElement(Probe)));
+  } catch (e) {
+    delete env.IS_REACT_ACT_ENVIRONMENT;
+    throw e;
+  }
+  return {
+    act,
+    stop() {
+      try {
+        act(() => root.unmount());
+      } finally {
+        delete env.IS_REACT_ACT_ENVIRONMENT;
+      }
+    },
+  };
+}
+
+export async function readHook<T>(hook: () => T): Promise<T> {
+  let value!: T;
+  const probe = await probeHook(hook, (v) => (value = v));
+  probe.stop();
+  return value;
+}

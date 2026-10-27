@@ -4,7 +4,7 @@ import { newPlaylist, renamed, withoutTracks, withTracks } from "./playlists";
 import { compareText } from "./format";
 import { createListeners } from "./store";
 import { albumKey } from "./tags";
-import type { Album, Artist, LinkedFolder, Play, Playlist, RemovedSong, Track } from "./types";
+import type { Album, Artist, FavouriteAlbum, LinkedFolder, Play, Playlist, RemovedSong, Track } from "./types";
 
 // The live set of tracks. The arrays and maps handed to React are snapshots of it, rebuilt on publish.
 const store = new Map<string, Track>();
@@ -16,6 +16,7 @@ const artUsers = new Map<string, number>();
 let tracks: Track[] = [];
 let byId = new Map<string, Track>();
 let albums: Album[] = [];
+let albumKeys = new Set<string>();
 let artists: Artist[] = [];
 let artistKeys = new Set<string>();
 let dirty = false;
@@ -25,6 +26,8 @@ let plays: Play[] = [];
 // Replaced on change, never edited in place, so it can be a React snapshot.
 let removedSongs: ReadonlyMap<string, RemovedSong> = new Map();
 let removedPlays = 0;
+// Album key to when it was favourited. Replaced on change, like removedSongs.
+let favouriteAlbums: ReadonlyMap<string, number> = new Map();
 let loaded = false;
 let loadError: string | null = null;
 const { emit, subscribe } = createListeners();
@@ -57,6 +60,7 @@ function publish(): void {
     tracks = [...store.values()];
     byId = withSession(new Map(store));
     albums = groupAlbums(tracks);
+    albumKeys = new Set(albums.map((a) => a.key));
     artists = groupArtists(albums);
     artistKeys = new Set(artists.map((a) => a.key));
     dirty = false;
@@ -181,13 +185,15 @@ export function byDiscAndTrack(a: Track, b: Track): number {
 
 export async function loadLibrary(): Promise<void> {
   try {
-    const [t, p, f, pl, r] = await Promise.all([
+    const [t, p, f, pl, r, fa] = await Promise.all([
       getAll<Track>("tracks"),
       getAll<Playlist>("playlists"),
       getAll<LinkedFolder>("folders"),
       getAll<Play>("plays"),
       getAll<RemovedSong>("removed"),
+      getAll<FavouriteAlbum>("favourites"),
     ]);
+    favouriteAlbums = new Map(fa.map((a) => [a.key, a.at]));
     t.forEach(putTrack);
     playlists = p.sort((a, b) => a.createdAt - b.createdAt);
     folders = f;
@@ -347,7 +353,7 @@ export function hasArtist(key: string): boolean {
 }
 
 export function hasAlbum(key: string): boolean {
-  return albums.some((a) => a.key === key);
+  return albumKeys.has(key);
 }
 
 export function hasArt(artId: string): boolean {
@@ -376,6 +382,42 @@ export function useLikedTracks(): Track[] {
 
 export function useArtists(): Artist[] {
   return useSyncExternalStore(subscribe, () => artists);
+}
+
+export function useFavouriteAlbums(): Album[] {
+  const list = useAlbums();
+  const favourites = useSyncExternalStore(subscribe, () => favouriteAlbums);
+  return useMemo(
+    () => list.filter((a) => favourites.has(a.key)).sort((a, b) => favourites.get(b.key)! - favourites.get(a.key)!),
+    [list, favourites],
+  );
+}
+
+export function useFavouritePlaylists(): Playlist[] {
+  const list = usePlaylists();
+  return useMemo(
+    () => list.filter((p) => p.favouredAt !== undefined).sort((a, b) => b.favouredAt! - a.favouredAt!),
+    [list],
+  );
+}
+
+export function isFavouriteAlbum(key: string): boolean {
+  return favouriteAlbums.has(key);
+}
+
+export function useIsFavouriteAlbum(key: string): boolean {
+  return useSyncExternalStore(subscribe, () => favouriteAlbums.has(key));
+}
+
+// Checked against the published albums, so a favourite whose album hasn't been published yet isn't shown early.
+export function hasFavourites(): boolean {
+  if (playlists.some((p) => p.favouredAt !== undefined)) return true;
+  for (const key of favouriteAlbums.keys()) if (albumKeys.has(key)) return true;
+  return false;
+}
+
+export function useHasFavourites(): boolean {
+  return useSyncExternalStore(subscribe, hasFavourites);
 }
 
 export function usePlaylists(): Playlist[] {
@@ -520,6 +562,46 @@ function freeArt(changes: [from: string | null, to: string | null][]): string[] 
   return [...delta].filter(([id, d]) => d < 0 && (artUsers.get(id) ?? 0) + d <= 0).map(([id]) => id);
 }
 
+// An album key with the time it was favourited, or undefined to drop it.
+type FavouriteChange = [key: string, at: number | undefined];
+
+function applyFavourites(changes: FavouriteChange[]): void {
+  if (changes.length === 0) return;
+  const next = new Map(favouriteAlbums);
+  for (const [key, at] of changes) {
+    if (at === undefined) next.delete(key);
+    else next.set(key, at);
+  }
+  favouriteAlbums = next;
+}
+
+function favouriteWrites(changes: FavouriteChange[]): Write[] {
+  return changes.map(([key, at]): Write =>
+    at === undefined ? { store: "favourites", op: "delete", key } : { store: "favourites", op: "put", value: { key, at } satisfies FavouriteAlbum },
+  );
+}
+
+const hasSongsIn = (key: string, skip: ReadonlySet<string>) => [...store.values()].some((t) => !skip.has(t.id) && trackAlbumKey(t) === key);
+
+// A favourite album's key comes from its tags, so when an edit takes all its songs elsewhere, the favourite
+// follows most of them. An album with the same name later must not inherit it, so nowhere to go drops it.
+function favouritesAfterEdit(changes: { before: Track; next: Track }[]): FavouriteChange[] {
+  const moving = new Set(changes.map((c) => c.before.id));
+  const result: FavouriteChange[] = [];
+  for (const key of new Set(changes.map((c) => trackAlbumKey(c.before)))) {
+    const at = favouriteAlbums.get(key);
+    if (at === undefined || hasSongsIn(key, moving) || changes.some((c) => trackAlbumKey(c.next) === key)) continue;
+    result.push([key, undefined]);
+    const counts = new Map<string, number>();
+    for (const { before, next } of changes) {
+      if (trackAlbumKey(before) === key && next.album) counts.set(trackAlbumKey(next), (counts.get(trackAlbumKey(next)) ?? 0) + 1);
+    }
+    const to = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
+    if (to && !favouriteAlbums.has(to)) result.push([to, at]);
+  }
+  return result;
+}
+
 const newArtId = () => `art:${crypto.randomUUID()}`;
 
 // The importer reuses an album:<key> image for that album, so a song leaving the album can't keep that id.
@@ -548,18 +630,21 @@ export function editTracks(edits: ReadonlyMap<string, TagEdit>): Promise<boolean
       return { before, next: { ...next, artId } };
     });
     const unusedArt = freeArt(changes.map(({ before, next }) => [before.artId, next.artId]));
+    const favourites = favouritesAfterEdit(changes);
     try {
       const images = await Promise.all([...copies].map(async ([from, to]) => [to, await get<Blob>("art", from)] as const));
       await write([
         ...images.filter(([, blob]) => blob).map(([key, value]): Write => ({ store: "art", op: "put", key, value })),
         ...changes.map(({ next }): Write => ({ store: "tracks", op: "put", value: next })),
         ...unusedArt.map((key): Write => ({ store: "art", op: "delete", key })),
+        ...favouriteWrites(favourites),
       ]);
     } catch (e) {
       reportError("Couldn't save the changes. Nothing was changed.", e);
       return false;
     }
     unusedArt.forEach(forgetArt);
+    applyFavourites(favourites);
     // On the latest copy, so a like or play counted during the write survives.
     for (const { before, next } of changes) {
       putTrack({ ...(store.get(before.id) ?? before), ...edits.get(before.id), artId: next.artId });
@@ -716,7 +801,12 @@ export function removeTracks(ids: ReadonlySet<string>): Promise<void> {
       .map((t): RemovedSong => ({ id: t.id, title: t.title, artist: t.artist, album: t.album, albumArtist: t.albumArtist, removedAt: now }));
     remembered.forEach((s) => writes.push({ store: "removed", op: "put", value: s }));
     changed.forEach((p, i) => p !== playlists[i] && writes.push({ store: "playlists", op: "put", value: p }));
+    // An album with the same name added later must not come back as a favourite.
+    const emptied = [...new Set(gone.map(trackAlbumKey))].filter((key) => favouriteAlbums.has(key) && !hasSongsIn(key, ids));
+    const favourites = emptied.map((key): FavouriteChange => [key, undefined]);
+    writes.push(...favouriteWrites(favourites));
     await write(writes);
+    applyFavourites(favourites);
     unusedArt.forEach(forgetArt);
     gone.forEach((t) => dropTrack(t.id));
     playlists = changed;
@@ -770,6 +860,28 @@ export async function createPlaylist(name: string, trackIds: string[] = []): Pro
 export async function renamePlaylist(id: string, name: string): Promise<void> {
   const p = playlists.find((x) => x.id === id);
   if (p) await savePlaylist(renamed(p, name, Date.now()));
+}
+
+export async function togglePlaylistFavourite(id: string): Promise<void> {
+  const p = playlists.find((x) => x.id === id);
+  if (p) await savePlaylist({ ...p, favouredAt: p.favouredAt === undefined ? Date.now() : undefined });
+}
+
+// Memory first, like likes. The write is queued with song writes, which also change favourites, and saves
+// whatever memory holds by then.
+export function toggleFavouriteAlbum(key: string): Promise<void> {
+  applyFavourites([[key, favouriteAlbums.has(key) ? undefined : Date.now()]]);
+  emit();
+  return queueTrackWrite(async () => {
+    try {
+      await write(favouriteWrites([[key, favouriteAlbums.get(key)]]));
+    } catch (e) {
+      const saved = await get<FavouriteAlbum>("favourites", key).catch(() => undefined);
+      applyFavourites([[key, saved?.at]]);
+      emit();
+      reportError("Couldn't save the change to your favourites.", e);
+    }
+  });
 }
 
 export async function deletePlaylist(id: string): Promise<void> {

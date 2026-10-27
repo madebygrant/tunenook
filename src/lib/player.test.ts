@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { freshEnvironment, makeTrack } from "./testing";
+import { freshEnvironment, makeTrack, probeHook } from "./testing";
 import type { Track } from "./types";
 
 beforeEach(freshEnvironment);
@@ -177,24 +177,14 @@ describe("output picker", () => {
   it("tracks when an AirPlay speaker takes over the sound", async () => {
     const { player, audio } = await setup([]);
     const seen: boolean[] = [];
-    const { createRoot } = await import("react-dom/client");
-    const { act, createElement } = await import("react");
-    const env = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
-    env.IS_REACT_ACT_ENVIRONMENT = true;
+    const { act, stop } = await probeHook(player.useWirelessOutput, (v) => seen.push(v));
     try {
-      function Probe() {
-        seen.push(player.useWirelessOutput());
-        return null;
-      }
-      const root = createRoot(document.createElement("div"));
-      act(() => root.render(createElement(Probe)));
       Object.assign(audio, { webkitCurrentPlaybackTargetIsWireless: true });
       act(() => void audio.dispatchEvent(new Event("webkitcurrentplaybacktargetiswirelesschanged")));
       Object.assign(audio, { webkitCurrentPlaybackTargetIsWireless: false });
       act(() => void audio.dispatchEvent(new Event("webkitcurrentplaybacktargetiswirelesschanged")));
-      act(() => root.unmount());
     } finally {
-      delete env.IS_REACT_ACT_ENVIRONMENT;
+      stop();
     }
     expect(seen).toEqual([false, true, false]);
   });

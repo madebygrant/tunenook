@@ -55,6 +55,14 @@ export interface Playlist {
   trackIds: string[];
   createdAt: number;
   updatedAt: number;
+  // Set while it's a favourite, so Home can list the latest first.
+  favouredAt?: number;
+}
+
+// Albums have no record of their own, so a favourite holds the album's key.
+export interface FavouriteAlbum {
+  key: string;
+  at: number;
 }
 
 export interface Album {

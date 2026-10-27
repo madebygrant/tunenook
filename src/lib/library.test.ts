@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { freshEnvironment, makeTrack } from "./testing";
+import { freshEnvironment, makeTrack, probeHook, readHook } from "./testing";
 
 beforeEach(freshEnvironment);
 
@@ -413,5 +413,80 @@ describe("session tracks", () => {
     expect(library.getPlaylists()[0].trackIds).toEqual(["a"]);
     await library.addToPlaylist(created!.id, ["s"]);
     expect(library.getPlaylists()[0].trackIds).toEqual(["a"]);
+  });
+});
+
+describe("favourites", () => {
+  it("keeps favourite albums and playlists across a reload, newest first", async () => {
+    const { library } = await load();
+    await library.addTrack({ track: makeTrack("a", { album: "Lamplight" }) });
+    await library.addTrack({ track: makeTrack("b", { album: "Ember" }) });
+    const mix = await library.createPlaylist("Mix", ["a"]);
+    const other = await library.createPlaylist("Other", ["b"]);
+    expect(library.hasFavourites()).toBe(false);
+    vi.spyOn(Date, "now").mockReturnValueOnce(1).mockReturnValueOnce(2).mockReturnValueOnce(3).mockReturnValueOnce(4);
+    await library.toggleFavouriteAlbum("lamplight");
+    await library.toggleFavouriteAlbum("ember");
+    await library.togglePlaylistFavourite(mix!.id);
+    await library.togglePlaylistFavourite(other!.id);
+    await library.togglePlaylistFavourite(other!.id);
+    vi.restoreAllMocks();
+    vi.resetModules();
+    const { library: reloaded } = await load();
+    expect(reloaded.hasFavourites()).toBe(true);
+    expect((await readHook(reloaded.useFavouriteAlbums)).map((a) => a.title)).toEqual(["Ember", "Lamplight"]);
+    expect((await readHook(reloaded.useFavouritePlaylists)).map((p) => p.name)).toEqual(["Mix"]);
+  });
+
+  it("shows a toggle at once and settles quick taps on what was tapped last", async () => {
+    const { library } = await load();
+    await library.addTrack({ track: makeTrack("a", { album: "Lamplight" }) });
+    await library.addTrack({ track: makeTrack("b", { album: "Ember" }) });
+    const seen: boolean[] = [];
+    const { act, stop } = await probeHook(() => library.useIsFavouriteAlbum("lamplight"), (v) => seen.push(v));
+    let saves: Promise<void>[] = [];
+    try {
+      act(() => {
+        saves = [library.toggleFavouriteAlbum("lamplight"), library.toggleFavouriteAlbum("ember"), library.toggleFavouriteAlbum("ember")];
+      });
+    } finally {
+      stop();
+    }
+    expect(seen).toEqual([false, true]);
+    await Promise.all(saves);
+    vi.resetModules();
+    const { library: reloaded } = await load();
+    expect(reloaded.isFavouriteAlbum("lamplight")).toBe(true);
+    expect(reloaded.isFavouriteAlbum("ember")).toBe(false);
+  });
+
+  it("moves an album's favourite with a rename, from wherever the edit comes", async () => {
+    const { library } = await load();
+    await library.addTrack({ track: makeTrack("a", { album: "Lamplight" }) });
+    await library.addTrack({ track: makeTrack("b", { album: "Lamplight" }) });
+    await library.toggleFavouriteAlbum("lamplight");
+    // Moving one song leaves the album, so the favourite stays.
+    await library.editTracks(new Map([["a", { album: "Ember" }]]));
+    expect(library.isFavouriteAlbum("lamplight")).toBe(true);
+    await library.editTracks(new Map([["b", { album: "Ember" }]]));
+    vi.resetModules();
+    const { library: reloaded } = await load();
+    expect(reloaded.isFavouriteAlbum("lamplight")).toBe(false);
+    expect((await readHook(reloaded.useFavouriteAlbums)).map((a) => a.title)).toEqual(["Ember"]);
+  });
+
+  it("drops a favourite once its album's songs are removed, so a namesake isn't a favourite", async () => {
+    const { library } = await load();
+    await library.addTrack({ track: makeTrack("a", { album: "Greatest Hits", albumArtist: "Queen" }) });
+    await library.addTrack({ track: makeTrack("b", { album: "Greatest Hits", albumArtist: "Queen" }) });
+    await library.toggleFavouriteAlbum("greatest hits");
+    await library.removeTracks(new Set(["a"]));
+    expect(library.hasFavourites()).toBe(true);
+    await library.removeTracks(new Set(["b"]));
+    expect(library.hasFavourites()).toBe(false);
+    await library.addTrack({ track: makeTrack("c", { album: "Greatest Hits", albumArtist: "Abba" }) });
+    vi.resetModules();
+    const { library: reloaded } = await load();
+    expect(reloaded.isFavouriteAlbum("greatest hits")).toBe(false);
   });
 });

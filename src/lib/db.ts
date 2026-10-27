@@ -1,7 +1,7 @@
 const DB_NAME = "tunenook";
-const VERSION = 3;
+const VERSION = 4;
 
-export type StoreName = "tracks" | "files" | "art" | "playlists" | "folders" | "plays" | "removed";
+export type StoreName = "tracks" | "files" | "art" | "playlists" | "folders" | "plays" | "removed" | "favourites";
 
 let opening: Promise<IDBDatabase> | null = null;
 
@@ -25,6 +25,8 @@ function open(): Promise<IDBDatabase> {
       create("plays", { keyPath: "id" });
       // Names of removed songs that still have plays in the log.
       create("removed", { keyPath: "id" });
+      // Favourite albums by key. Playlists mark their own.
+      create("favourites", { keyPath: "key" });
     };
     req.onsuccess = () => {
       const db = req.result;

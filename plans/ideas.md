@@ -8,6 +8,7 @@ The backlog from a review of the app on 2026-10-16. Each idea links to the wave 
 | [Library](wave-library.md) | Play history, favourites, bulk actions, reorder, tag editing |
 | [Playback](wave-playback.md) | Sleep timer, volume, lyrics, audiobooks, gapless |
 | [Data and platform](wave-data.md) | Duplicates, backup, large libraries, file handlers, cover art |
+| [Favourites](wave-favourites.md) | Favourite playlists and albums, Home page |
 
 Suggested order across plans: Navigation, then Library waves 1 and 2, then the rest as wanted. Each plan's waves are ordered so earlier ones make later ones safe.
 
