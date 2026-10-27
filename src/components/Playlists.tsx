@@ -124,7 +124,7 @@ export function LikedPage({
         Playlists
       </Button>
       <div className="show-head">
-        <CoverArt artId={tracks.find((t) => t.artId)?.artId ?? null} title="Liked songs" size={120} />
+        <CoverArt artId={tracks.find((t) => t.artId)?.artId ?? null} title="Liked songs" />
         <div>
           <h1 id="liked-title" className="display-lg" tabIndex={-1}>
             Liked songs

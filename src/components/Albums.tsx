@@ -153,7 +153,7 @@ export function AlbumPage({
         {backLabel}
       </Button>
       <div className="show-head">
-        <CoverArt artId={album.artId} title={album.title} size={120} />
+        <CoverArt artId={album.artId} title={album.title} />
         <div>
           <h1 id="album-title" className="display-lg" tabIndex={-1}>
             {album.title}

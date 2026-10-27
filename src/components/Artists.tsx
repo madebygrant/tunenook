@@ -112,7 +112,7 @@ export function ArtistPage({
         {backLabel}
       </Button>
       <div className="show-head">
-        <CoverArt artId={artist.artId} title={artist.name} size={120} />
+        <CoverArt artId={artist.artId} title={artist.name} />
         <div>
           <h1 id="artist-title" className="display-lg" tabIndex={-1}>
             {artist.name}
