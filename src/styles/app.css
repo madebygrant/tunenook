@@ -166,8 +166,9 @@ dd {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr) auto;
-  height: 100vh;
-  height: 100dvh;
+  /* Installed on iOS with a black-translucent status bar, 100dvh comes up short by the top inset and leaves a band under the dock. */
+  position: fixed;
+  inset: 0;
 }
 .main {
   grid-row: 1;
