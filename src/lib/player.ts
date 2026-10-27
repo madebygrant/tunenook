@@ -32,6 +32,7 @@ const SAVE_INTERVAL_MS = 5000;
 const VOLUME_KEY = "tunenook.volume";
 const FADE_MS = 3 * 60_000;
 const SLEEP_CHOICE_KEY = "tunenook.sleepChoice";
+const SLEEP_HIDES_PLAYS_KEY = "tunenook.sleepHidesPlays";
 
 // "song" stops at the end of whatever song is playing then, so it follows a skip; "album" stops when the next
 // song would come from another album.
@@ -69,6 +70,8 @@ const { emit, subscribe } = createListeners();
 let save: () => void = () => {};
 let sleep: SleepTimer | null = null;
 let sleepCheck: ReturnType<typeof setTimeout> | undefined;
+// Songs fallen asleep to aren't really listened to, so this keeps them out of play counts and Review.
+let sleepHidesPlays = readFlag(SLEEP_HIDES_PLAYS_KEY);
 // Safari's picker for AirPlay speakers and Bluetooth headphones; no other browser lets a page choose its output.
 interface RoutableAudio extends HTMLAudioElement {
   webkitShowPlaybackTargetPicker?: () => void;
@@ -91,6 +94,14 @@ function readVolume(): number {
     return Number.isFinite(saved) ? Math.min(Math.max(saved, 0), 1) : 1;
   } catch {
     return 1;
+  }
+}
+
+function readFlag(key: string): boolean {
+  try {
+    return localStorage.getItem(key) === "1";
+  } catch {
+    return false;
   }
 }
 
@@ -352,6 +363,8 @@ function checkSleep(): void {
   if (left <= 0) {
     clearSleep();
     audio?.pause();
+    // What was heard asleep shouldn't count toward a play when it resumes.
+    listens.reset();
     wantPlay = false;
     // A next song still loading would otherwise start by itself once it's ready.
     if (loadedId !== currentId(queue)) load(false);
@@ -418,7 +431,7 @@ export function initPlayer(): void {
   a.addEventListener("timeupdate", () => {
     if (a.src === silentUrl) return;
     checkSleep();
-    if (countingId && listens.observe(a.currentTime, a.duration)) void recordPlay(countingId);
+    if (countingId && listens.observe(a.currentTime, a.duration) && !(sleep && sleepHidesPlays)) void recordPlay(countingId);
     const next = Math.floor(a.currentTime);
     if (next !== position) {
       position = next;
@@ -673,6 +686,20 @@ export function lastSleepChoice(): SleepChoice | null {
 
 export function useSleepTimer(): SleepTimer | null {
   return useSyncExternalStore(subscribe, () => sleep);
+}
+
+export function setSleepHidesPlays(on: boolean): void {
+  sleepHidesPlays = on;
+  try {
+    localStorage.setItem(SLEEP_HIDES_PLAYS_KEY, on ? "1" : "0");
+  } catch {
+    // Without storage it lasts until the app closes.
+  }
+  emit();
+}
+
+export function useSleepHidesPlays(): boolean {
+  return useSyncExternalStore(subscribe, () => sleepHidesPlays);
 }
 
 export function canPickOutput(): boolean {

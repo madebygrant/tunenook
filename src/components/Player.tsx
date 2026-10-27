@@ -16,6 +16,7 @@ import {
   seek,
   seekBy,
   SEEK_SECONDS,
+  setSleepHidesPlays,
   setSleepTimer,
   setVolume,
   toggle,
@@ -26,6 +27,7 @@ import {
   useNowPlaying,
   usePosition,
   useQueue,
+  useSleepHidesPlays,
   useSleepTimer,
   useVolume,
   useWirelessOutput,
@@ -90,6 +92,7 @@ const sleepLabel = (minutes: number) => (minutes % 60 ? `${minutes} minutes` : m
 // A quiet line in the player that opens the choices in their own sheet, so they never crowd the controls.
 function SleepTimerControl() {
   const sleep = useSleepTimer();
+  const hidesPlays = useSleepHidesPlays();
   const [open, setOpen] = useState(false);
   // Read when the sheet opens, so it shows what was picked the night before.
   const last = open ? lastSleepChoice() : null;
@@ -134,15 +137,21 @@ function SleepTimerControl() {
                 </button>
               </li>
             )}
+            <li className="menu-gap" aria-hidden="true" />
+            <li>
+              <button className="menu-item" aria-pressed={hidesPlays} onClick={() => setSleepHidesPlays(!hidesPlays)}>
+                Don't count plays during the timer
+                <span className="menu-note" aria-hidden="true">
+                  {hidesPlays ? "On" : "Off"}
+                </span>
+              </button>
+            </li>
             {sleep && (
-              <>
-                <li className="menu-gap" aria-hidden="true" />
-                <li>
-                  <button className="menu-item" onClick={() => choose(null)}>
-                    Turn off
-                  </button>
-                </li>
-              </>
+              <li>
+                <button className="menu-item" onClick={() => choose(null)}>
+                  Turn off
+                </button>
+              </li>
             )}
           </ul>
         </MenuSheet>

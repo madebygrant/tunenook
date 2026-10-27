@@ -267,6 +267,75 @@ describe("sleep timer", () => {
     }
   });
 
+  // Plays save in order, so once b's play has landed, a missing play for a means a was never counted.
+  async function countingSetup() {
+    const env = await setup(["a", "b"]);
+    let time = 0;
+    Object.defineProperty(env.audio, "currentTime", { configurable: true, get: () => time, set: (t: number) => (time = t) });
+    const tick = (...times: number[]) => {
+      for (time of times) env.audio.dispatchEvent(new Event("timeupdate"));
+    };
+    const onlyBCounted = async () => {
+      env.player.next();
+      await env.loaded("b");
+      tick(0, 31);
+      await vi.waitFor(() => expect(env.library.getTrack("b")?.playCount).toBe(1));
+      expect(env.library.getTrack("a")?.playCount).toBeUndefined();
+    };
+    return { ...env, tick, onlyBCounted };
+  }
+
+  it.each([
+    ["a timed stop", 30, (player: typeof import("./player")) => player.setSleepTimer(null)],
+    ["the end of the song", "song", (_: unknown, audio: HTMLAudioElement) => audio.dispatchEvent(new Event("ended"))],
+  ] as const)("leaves plays out of the history until %s, when asked", async (_, choice, end) => {
+    const { player, audio, loaded, tick, onlyBCounted } = await countingSetup();
+    player.setSleepHidesPlays(true);
+    player.setSleepTimer(choice);
+    player.playTracks(["a", "b"], 0);
+    await loaded("a");
+    tick(0, 31);
+    end(player, audio);
+    expect(player.getSleepTimer()).toBeNull();
+    await onlyBCounted();
+  });
+
+  it("doesn't count the play that reaches its threshold on the tick the timer runs out", async () => {
+    const { player, tick, onlyBCounted } = await countingSetup();
+    player.setSleepHidesPlays(true);
+    player.playTracks(["a", "b"], 0);
+    await vi.waitFor(() => expect(player.getNowPlaying().playing).toBe(true));
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    try {
+      player.setSleepTimer(15);
+      tick(0);
+      vi.setSystemTime(Date.now() + 15 * 60_000);
+      tick(31);
+      expect(player.getSleepTimer()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+    await onlyBCounted();
+  });
+
+  it("starts listening afresh after a timed stop, so time heard asleep doesn't count", async () => {
+    const { player, tick, onlyBCounted } = await countingSetup();
+    player.playTracks(["a", "b"], 0);
+    await vi.waitFor(() => expect(player.getNowPlaying().playing).toBe(true));
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    try {
+      player.setSleepTimer(15);
+      tick(0, 20);
+      vi.advanceTimersByTime(15 * 60_000);
+      expect(player.getSleepTimer()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+    player.toggle();
+    tick(20, 31);
+    await onlyBCounted();
+  });
+
   it("remembers the last choice", async () => {
     const { player } = await setup(["a"]);
     expect(player.lastSleepChoice()).toBeNull();
