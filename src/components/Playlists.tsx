@@ -1,6 +1,20 @@
 import { useMemo, useState } from "react";
 import { formatTotal, plural } from "../lib/format";
-import { addToPlaylist, createPlaylist, deletePlaylist, getPlaylists, renamePlaylist, savePlaylist, setLikes, totalSeconds, useLikedTracks, usePlaylists, useTrackMap, useTracks } from "../lib/library";
+import {
+  addToPlaylist,
+  createPlaylist,
+  deletePlaylist,
+  getPlaylists,
+  renamePlaylist,
+  savePlaylist,
+  setLikes,
+  toggleFavouritePlaylist,
+  totalSeconds,
+  useLikedTracks,
+  usePlaylists,
+  useTrackMap,
+  useTracks,
+} from "../lib/library";
 import { download, safeFileName } from "../lib/download";
 import { toM3u, trackPath } from "../lib/m3u";
 import { playTracks } from "../lib/player";
@@ -15,7 +29,7 @@ import { SearchField } from "./SearchField";
 import { SelectableActions, SelectButton } from "./Selection";
 import { SongList } from "./SongList";
 import { CollectionMenu, Confirm } from "./SongMenu";
-import { Button, CoverArt, TextField } from "./ui";
+import { Button, CoverArt, FavouriteButton, TextField } from "./ui";
 
 function playlistTracks(p: Playlist, byId: Map<string, Track>): Track[] {
   return p.trackIds.map((id) => byId.get(id)).filter((t): t is Track => t !== undefined);
@@ -253,6 +267,11 @@ export function PlaylistPage({
             <Button small variant="secondary" icon={<ShuffleIcon />} disabled={!ids.length} onClick={() => playTracks(ids, -1, { shuffle: true })}>
               Shuffle
             </Button>
+            <FavouriteButton
+              on={playlist.favouredAt !== undefined}
+              name={playlist.name}
+              onToggle={() => void toggleFavouritePlaylist(playlist.id)}
+            />
             <Button small variant="secondary" icon={<PlusIcon />} onClick={() => setAdding(true)}>
               Add songs
             </Button>

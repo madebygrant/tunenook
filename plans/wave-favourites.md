@@ -28,7 +28,7 @@ Risk: a database version bump. A tab still open on version 3 gets the existing "
 
 Exit criterion: standard check passes, and the new tests cover toggling, reload, rename and removed albums.
 
-## Wave 2: marking favourites
+## Wave 2: marking favourites [done 2026-10-27]
 
 Goal: albums and playlists can be favourited from their pages.
 

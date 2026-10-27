@@ -862,7 +862,7 @@ export async function renamePlaylist(id: string, name: string): Promise<void> {
   if (p) await savePlaylist(renamed(p, name, Date.now()));
 }
 
-export async function togglePlaylistFavourite(id: string): Promise<void> {
+export async function toggleFavouritePlaylist(id: string): Promise<void> {
   const p = playlists.find((x) => x.id === id);
   if (p) await savePlaylist({ ...p, favouredAt: p.favouredAt === undefined ? Date.now() : undefined });
 }

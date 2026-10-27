@@ -427,9 +427,9 @@ describe("favourites", () => {
     vi.spyOn(Date, "now").mockReturnValueOnce(1).mockReturnValueOnce(2).mockReturnValueOnce(3).mockReturnValueOnce(4);
     await library.toggleFavouriteAlbum("lamplight");
     await library.toggleFavouriteAlbum("ember");
-    await library.togglePlaylistFavourite(mix!.id);
-    await library.togglePlaylistFavourite(other!.id);
-    await library.togglePlaylistFavourite(other!.id);
+    await library.toggleFavouritePlaylist(mix!.id);
+    await library.toggleFavouritePlaylist(other!.id);
+    await library.toggleFavouritePlaylist(other!.id);
     vi.restoreAllMocks();
     vi.resetModules();
     const { library: reloaded } = await load();

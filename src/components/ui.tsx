@@ -9,6 +9,7 @@ import {
 } from "react";
 import { initials } from "../lib/format";
 import { useArtUrl } from "../lib/useArtUrl";
+import { HeartIcon } from "./icons";
 
 type Variant = "primary" | "secondary" | "ghost";
 
@@ -26,6 +27,20 @@ export function Button({ variant = "primary", small, icon, className, children, 
       {icon}
       {children}
     </button>
+  );
+}
+
+export function FavouriteButton({ on, name, onToggle }: { on: boolean; name: string; onToggle: () => void }) {
+  return (
+    <Button
+      small
+      variant="ghost"
+      icon={<HeartIcon filled={on} />}
+      aria-pressed={on}
+      aria-label={`Favourite ${name}`}
+      title={on ? "Remove from favourites" : "Add to favourites"}
+      onClick={onToggle}
+    />
   );
 }
 

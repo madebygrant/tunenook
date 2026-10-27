@@ -2,7 +2,16 @@ import { useDeferredValue, useMemo, useState } from "react";
 import { formatTotal, plural } from "../lib/format";
 import { findAlbumArt, needsArt, useArtLookup, type LookupResult } from "../lib/artLookup";
 import { downscale } from "../lib/importer";
-import { isListedAlbum, isUntaggedGroup, MIN_ALBUM_TRACKS, setAlbumArt, totalSeconds, useAlbums } from "../lib/library";
+import {
+  isListedAlbum,
+  isUntaggedGroup,
+  MIN_ALBUM_TRACKS,
+  setAlbumArt,
+  toggleFavouriteAlbum,
+  totalSeconds,
+  useAlbums,
+  useIsFavouriteAlbum,
+} from "../lib/library";
 import { playTracks } from "../lib/player";
 import { matchesSearch, searchWords, useListPlayback } from "../lib/useListPlayback";
 import { useSelection } from "../lib/useSelection";
@@ -13,7 +22,7 @@ import { SelectableActions, SelectButton } from "./Selection";
 import { AlbumDetails } from "./EditDetails";
 import { CollectionMenu, MenuSheet } from "./SongMenu";
 import { SongList } from "./SongList";
-import { Button, CoverArt } from "./ui";
+import { Button, CoverArt, FavouriteButton } from "./ui";
 
 export function Albums({ onOpen, onAdd }: { onOpen: (key: string) => void; onAdd: () => void }) {
   const albums = useAlbums();
@@ -92,14 +101,16 @@ export function AlbumPage({
 }) {
   const found = useAlbums().find((a) => a.key === albumKey);
   // Held through a rename, so the page doesn't flash as missing before it moves to the album's new key.
-  const [renaming, setRenaming] = useState<Album | null>(null);
-  const album = found ?? renaming;
+  const [renaming, setRenaming] = useState<{ album: Album; favourite: boolean } | null>(null);
+  const album = found ?? renaming?.album;
   const tracks = album?.tracks ?? [];
   const { currentIndex, playing, onPlay } = useListPlayback(tracks);
   const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const lookupOn = useArtLookup();
   const selection = useSelection(tracks);
+  // The saved rename moves the favourite to the new key before the page follows it there.
+  const favourite = useIsFavouriteAlbum(albumKey) || !!renaming?.favourite;
   const ids = tracks.map((t) => t.id);
 
   if (!album) {
@@ -161,6 +172,9 @@ export function AlbumPage({
             <Button small variant="secondary" icon={<ShuffleIcon />} onClick={() => playTracks(ids, -1, { shuffle: true })}>
               Shuffle
             </Button>
+            {!untagged && (
+              <FavouriteButton on={favourite} name={album.title} onToggle={() => void toggleFavouriteAlbum(albumKey)} />
+            )}
             <SelectButton small selection={selection} />
             <Button small variant="ghost" icon={<MoreIcon />} aria-label={`More for ${album.title}`} onClick={() => setMenuOpen(true)} />
           </SelectableActions>
@@ -205,7 +219,7 @@ export function AlbumPage({
         <MenuSheet label={`Edit ${album.title}`} title={album.title} subtitle={album.artist} onClose={() => setEditing(false)}>
           <AlbumDetails
             album={album}
-            onSaving={(saving) => setRenaming(saving ? album : null)}
+            onSaving={(saving) => setRenaming(saving ? { album, favourite } : null)}
             onSaved={(message, key) => {
               onToast(message);
               if (key !== albumKey) onRenamed(key);
