@@ -8,7 +8,7 @@ import type { Track } from "../lib/types";
 import { CheckIcon, ChevronDownIcon, PlayIcon, ShuffleIcon } from "./icons";
 import { SearchField } from "./SearchField";
 import { MenuSheet } from "./SongMenu";
-import { SelectableActions, SelectButton } from "./Selection";
+import { ListBar } from "./Selection";
 import { SongList } from "./SongList";
 import { Button } from "./ui";
 
@@ -129,15 +129,14 @@ export function Songs({
         </div>
       ) : (
         <>
-          <SelectableActions selection={selection} tracks={shown} removal={{ kind: "library" }} onToast={onToast}>
+          <div className="head-actions transport">
             <Button small icon={<PlayIcon />} onClick={() => playTracks(ids, 0, { shuffle: false })} disabled={!ids.length}>
               Play
             </Button>
             <Button small variant="secondary" icon={<ShuffleIcon />} onClick={() => playTracks(ids, -1, { shuffle: true })} disabled={!ids.length}>
               Shuffle
             </Button>
-            <SelectButton small selection={selection} disabled={!ids.length} />
-          </SelectableActions>
+          </div>
           <div className="list-tools">
             <SearchField label="Search songs, artists, albums" value={query} onChange={setQuery} />
             <div className="filters" role="group" aria-label="Sort by">
@@ -165,16 +164,19 @@ export function Songs({
           {shown.length === 0 ? (
             <p className="list-empty muted">No songs match “{search}”.</p>
           ) : (
-            <SongList
-              label="Songs"
-              tracks={shown}
-              currentIndex={currentIndex}
-              playing={playing}
-              onPlay={onPlay}
-              onMore={(i) => onMore(shown[i])}
-              selection={selection}
-              pinnedIndex={focusIndex >= 0 ? focusIndex : null}
-            />
+            <>
+              <ListBar selection={selection} tracks={shown} removal={{ kind: "library" }} onToast={onToast} />
+              <SongList
+                label="Songs"
+                tracks={shown}
+                currentIndex={currentIndex}
+                playing={playing}
+                onPlay={onPlay}
+                onMore={(i) => onMore(shown[i])}
+                selection={selection}
+                pinnedIndex={focusIndex >= 0 ? focusIndex : null}
+              />
+            </>
           )}
           {sortOpen && (
             <MenuSheet label="Sort songs" title="Sort songs" subtitle="Order of the list" onClose={() => setSortOpen(false)}>

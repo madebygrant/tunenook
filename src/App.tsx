@@ -59,7 +59,6 @@ export default function App() {
   const followed = useRef(false);
   const drawer = useMediaQuery("(max-width: 959px)");
   const nowTrack = now.id ? byId.get(now.id) : undefined;
-  const hasDock = nowTrack !== undefined;
   // A song the player asked the list to land on; cleared once the list has scrolled to it.
   const [focusTrack, setFocusTrack] = useState<string | null>(null);
   const pendingFocus = useRef(false);
@@ -111,16 +110,20 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const dock = document.querySelector(".player-dock");
-    if (!dock) return;
+    const page = main.current;
+    const app = page?.closest(".app");
+    if (!page || !app) return;
     const root = document.documentElement.style;
-    const observer = new ResizeObserver(() => root.setProperty("--dock-h", `${dock.getBoundingClientRect().height}px`));
-    observer.observe(dock);
+    // Measured from the page's foot, so it covers whichever fills the row below: the player, the selection bar or nothing.
+    const observer = new ResizeObserver(() =>
+      root.setProperty("--dock-h", `${app.getBoundingClientRect().bottom - page.getBoundingClientRect().bottom}px`),
+    );
+    observer.observe(page);
     return () => {
       observer.disconnect();
       root.removeProperty("--dock-h");
     };
-  }, [hasDock]);
+  }, []);
 
   useEffect(() => {
     const vv = window.visualViewport;

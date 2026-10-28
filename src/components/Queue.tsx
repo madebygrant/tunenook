@@ -6,7 +6,7 @@ import { idAt } from "../lib/queue";
 import { useSelection } from "../lib/useSelection";
 import type { Track } from "../lib/types";
 import { PlusIcon } from "./icons";
-import { SelectableActions, SelectButton } from "./Selection";
+import { SelectButton, SelectionBar } from "./Selection";
 import { MenuSheet, PlaylistPicker } from "./SongMenu";
 import { SongList } from "./SongList";
 import { Button } from "./ui";
@@ -62,17 +62,11 @@ export function Queue({
         <p className="lead muted">Nothing is queued. Play a song, album or playlist to start.</p>
       ) : (
         <>
-          <SelectableActions
-            selection={selection}
-            tracks={upNextTracks}
-            removal={{ kind: "custom", label: "Remove from queue", run: removeSelected }}
-            onToast={onToast}
-          >
+          <div className="head-actions">
             <Button small variant="secondary" icon={<PlusIcon />} onClick={() => setSaving(true)}>
               Save as playlist
             </Button>
-            <SelectButton small selection={selection} disabled={!upNext.length} />
-          </SelectableActions>
+          </div>
           {saving && (
             <MenuSheet label="Save queue as a playlist" title="Save queue" subtitle={plural(saveIds.length, "song")} onClose={() => setSaving(false)}>
               <PlaylistPicker
@@ -97,10 +91,13 @@ export function Queue({
           <div className="section-head">
             <h2 className="h3 section-title">Up next</h2>
             <span className="count">{plural(upNext.length, "song")}</span>
-            {upNext.length > 0 && (
-              <Button variant="ghost" small onClick={clearUpNext}>
-                Clear
-              </Button>
+            {upNext.length > 0 && !selecting && (
+              <span className="section-tools">
+                <Button variant="ghost" small onClick={clearUpNext}>
+                  Clear
+                </Button>
+                <SelectButton small selection={selection} />
+              </span>
             )}
           </div>
           {upNext.length === 0 ? (
@@ -108,15 +105,25 @@ export function Queue({
               {queue.repeat === "all" ? "The queue starts again from the top." : "Nothing after this song."}
             </p>
           ) : (
-            <SongList
-              label="Up next"
-              tracks={upNextTracks}
-              currentIndex={null}
-              playing={false}
-              onPlay={(i) => jumpTo(upNext[i].pos)}
-              onMore={(i) => onMore(upNext[i].track, upNext[i].pos)}
-              selection={selection}
-            />
+            <>
+              {selecting && (
+                <SelectionBar
+                  selection={selection}
+                  tracks={upNextTracks}
+                  removal={{ kind: "custom", label: "Remove from queue", short: "Remove", run: removeSelected }}
+                  onToast={onToast}
+                />
+              )}
+              <SongList
+                label="Up next"
+                tracks={upNextTracks}
+                currentIndex={null}
+                playing={false}
+                onPlay={(i) => jumpTo(upNext[i].pos)}
+                onMore={(i) => onMore(upNext[i].track, upNext[i].pos)}
+                selection={selection}
+              />
+            </>
           )}
         </>
       )}

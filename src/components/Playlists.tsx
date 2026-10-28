@@ -255,7 +255,7 @@ export function PlaylistPage({
       {tracks.length === 0 ? (
         <p className="list-empty muted">This playlist is empty. Add songs here, or use Add to playlist from any song's menu.</p>
       ) : (
-        <ListBar selection={selection} tracks={tracks} removal={{ kind: "custom", label: "Remove from playlist", run: removeRows }} onToast={onToast} />
+        <ListBar selection={selection} tracks={tracks} removal={{ kind: "custom", label: "Remove from playlist", short: "Remove", run: removeRows }} onToast={onToast} />
       )}
       {tracks.length > 0 && (
         <SongList
