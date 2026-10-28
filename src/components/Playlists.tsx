@@ -26,7 +26,7 @@ import type { Playlist, Track } from "../lib/types";
 import { Dialog } from "./Dialog";
 import { ArrowLeftIcon, CheckIcon, CloseIcon, MoreIcon, PlayIcon, PlusIcon, ShuffleIcon } from "./icons";
 import { SearchField } from "./SearchField";
-import { SelectableActions, SelectButton } from "./Selection";
+import { ListBar } from "./Selection";
 import { SongList } from "./SongList";
 import { CollectionMenu, Confirm } from "./SongMenu";
 import { Button, CoverArt, FavouriteButton, TextField } from "./ui";
@@ -133,18 +133,18 @@ export function LikedPage({
             {plural(tracks.length, "song")}
             {tracks.length > 0 && ` · ${formatTotal(totalSeconds(tracks))}`}
           </div>
-          <SelectableActions selection={selection} tracks={tracks} removal={{ kind: "custom", label: "Unlike", run: unlike }} onToast={onToast}>
+          <div className="head-actions">
             <Button small icon={<PlayIcon />} disabled={!ids.length} onClick={() => playTracks(ids, 0, { shuffle: false })}>
               Play
             </Button>
             <Button small variant="secondary" icon={<ShuffleIcon />} disabled={!ids.length} onClick={() => playTracks(ids, -1, { shuffle: true })}>
               Shuffle
             </Button>
-            <SelectButton small selection={selection} disabled={!ids.length} />
             <Button small variant="ghost" icon={<MoreIcon />} aria-label="More for Liked songs" disabled={!ids.length} onClick={() => setMenuOpen(true)} />
-          </SelectableActions>
+          </div>
         </div>
       </div>
+      {tracks.length > 0 && <ListBar selection={selection} tracks={tracks} removal={{ kind: "custom", label: "Unlike", run: unlike }} onToast={onToast} />}
       {menuOpen && (
         <CollectionMenu
           title="Liked songs"
@@ -227,42 +227,37 @@ export function PlaylistPage({
       <div className="show-head">
         <CoverArt artId={tracks.find((t) => t.artId)?.artId ?? null} title={playlist.name} />
         <div>
-          <h1 id="playlist-title" className="display-lg" tabIndex={-1}>
-            {playlist.name}
-          </h1>
+          <div className="title-row">
+            <h1 id="playlist-title" className="display-lg" tabIndex={-1}>
+              {playlist.name}
+            </h1>
+            <FavouriteButton
+              on={playlist.favouredAt !== undefined}
+              name={playlist.name}
+              onToggle={() => void toggleFavouritePlaylist(playlist.id)}
+            />
+          </div>
           <div className="count">
             {plural(tracks.length, "song")}
             {tracks.length > 0 && ` · ${formatTotal(totalSeconds(tracks))}`}
           </div>
-          <SelectableActions selection={selection} tracks={tracks} removal={{ kind: "custom", label: "Remove from playlist", run: removeRows }} onToast={onToast}>
+          <div className="head-actions">
             <Button small icon={<PlayIcon />} disabled={!ids.length} onClick={() => playTracks(ids, 0, { shuffle: false })}>
               Play
             </Button>
             <Button small variant="secondary" icon={<ShuffleIcon />} disabled={!ids.length} onClick={() => playTracks(ids, -1, { shuffle: true })}>
               Shuffle
             </Button>
-            <FavouriteButton
-              on={playlist.favouredAt !== undefined}
-              name={playlist.name}
-              onToggle={() => void toggleFavouritePlaylist(playlist.id)}
-            />
-            <Button small variant="secondary" icon={<PlusIcon />} onClick={() => setAdding(true)}>
-              Add songs
-            </Button>
-            <SelectButton small selection={selection} disabled={!ids.length} />
-            <Button
-              small
-              variant="ghost"
-              icon={<MoreIcon />}
-              aria-label={`More for ${playlist.name}`}
-              onClick={() => setMenuOpen(true)}
-            />
-          </SelectableActions>
+            <Button small variant="ghost" icon={<MoreIcon />} aria-label={`More for ${playlist.name}`} onClick={() => setMenuOpen(true)} />
+          </div>
         </div>
       </div>
       {tracks.length === 0 ? (
-        <p className="list-empty muted">This playlist is empty. Use Add songs, or Add to playlist from any song's menu.</p>
+        <p className="list-empty muted">This playlist is empty. Add songs here, or use Add to playlist from any song's menu.</p>
       ) : (
+        <ListBar selection={selection} tracks={tracks} removal={{ kind: "custom", label: "Remove from playlist", run: removeRows }} onToast={onToast} />
+      )}
+      {tracks.length > 0 && (
         <SongList
           label={`${playlist.name} songs`}
           tracks={tracks}
@@ -273,6 +268,14 @@ export function PlaylistPage({
           selection={selection}
           onReorder={(from, to) => movePlaylistRow(current.id, from, to)}
         />
+      )}
+      {!selection.active && (
+        <button type="button" className="add-row" onClick={() => setAdding(true)}>
+          <span className="add-row-mark">
+            <PlusIcon />
+          </span>
+          Add songs
+        </button>
       )}
       {adding && <AddSongs playlist={playlist} onClose={() => setAdding(false)} />}
       {menuOpen && (

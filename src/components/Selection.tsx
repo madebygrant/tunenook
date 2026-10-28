@@ -127,6 +127,27 @@ export function SelectableActions({
   return <div className="head-actions">{children}</div>;
 }
 
+// Above a page's song list, so Select sits next to the songs it acts on.
+export function ListBar({
+  selection,
+  tracks,
+  removal,
+  onToast,
+}: {
+  selection: Selection;
+  tracks: Track[];
+  removal: Removal;
+  onToast: (message: string) => void;
+}) {
+  return (
+    <div className="list-bar">
+      <SelectableActions selection={selection} tracks={tracks} removal={removal} onToast={onToast}>
+        <SelectButton small selection={selection} />
+      </SelectableActions>
+    </div>
+  );
+}
+
 export function SelectButton({ selection, disabled, small }: { selection: Selection; disabled?: boolean; small?: boolean }) {
   return (
     <Button variant="ghost" small={small} icon={<CheckIcon />} disabled={disabled} onClick={selection.start}>

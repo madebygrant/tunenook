@@ -111,7 +111,7 @@ A `surface` dialog (a bottom sheet on phone width) headed by the title and artis
 Albums and playlists use Podnook's show tiles: square art, title in `title`, a `small` note (artist and year, or song count and total time).
 
 ### Album and playlist header
-120px art (72px on phone), display title, a `value` line of count and total time, then Play (lamp), Shuffle (secondary) and, on playlists, Add songs, Rename and Delete (ghost).
+120px art (72px on phone), display title with the favourite heart beside it, a `value` line of count and total time, then one row of Play (lamp), Shuffle (secondary) and More (ghost). On a phone Play and Shuffle share the row's width. Each action sits by what it acts on: Select is on a bar above the song list, which becomes the selection bar while selecting; on playlists Add songs is the last row of the list, and Rename and Delete are in More.
 
 ### Dock
 Podnook's dock with Previous, Play and Next as the transport and shuffle and repeat toggles where the speed button was. Toggles are latching keys: 40px `key` squares on a `lip` in `text-subtle`. On, they stay pushed down onto the lip and turn `text` on `surface-hover`, as a radio preset stays in while its station plays. They are never lamp, because they are settings, not where you are. Mute on the desktop dock and like in the full player work the same way. Under 400px the toggles move to the full player only.

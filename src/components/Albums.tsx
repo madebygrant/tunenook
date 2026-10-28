@@ -18,7 +18,7 @@ import { useSelection } from "../lib/useSelection";
 import type { Album, Track } from "../lib/types";
 import { ArrowLeftIcon, MoreIcon, PlayIcon, ShuffleIcon } from "./icons";
 import { SearchField } from "./SearchField";
-import { SelectableActions, SelectButton } from "./Selection";
+import { ListBar } from "./Selection";
 import { AlbumDetails } from "./EditDetails";
 import { CollectionMenu, MenuSheet } from "./SongMenu";
 import { SongList } from "./SongList";
@@ -155,9 +155,14 @@ export function AlbumPage({
       <div className="show-head">
         <CoverArt artId={album.artId} title={album.title} />
         <div>
-          <h1 id="album-title" className="display-lg" tabIndex={-1}>
-            {album.title}
-          </h1>
+          <div className="title-row">
+            <h1 id="album-title" className="display-lg" tabIndex={-1}>
+              {album.title}
+            </h1>
+            {!untagged && (
+              <FavouriteButton on={favourite} name={album.title} onToggle={() => void toggleFavouriteAlbum(albumKey)} />
+            )}
+          </div>
           <div className="author">
             {album.artist}
             {album.year ? ` · ${album.year}` : ""}
@@ -165,21 +170,18 @@ export function AlbumPage({
           <div className="count">
             {plural(tracks.length, "song")} · {formatTotal(totalSeconds(tracks))}
           </div>
-          <SelectableActions selection={selection} tracks={tracks} removal={{ kind: "library" }} onToast={onToast}>
+          <div className="head-actions">
             <Button small icon={<PlayIcon />} onClick={() => playTracks(ids, 0, { shuffle: false })}>
               Play
             </Button>
             <Button small variant="secondary" icon={<ShuffleIcon />} onClick={() => playTracks(ids, -1, { shuffle: true })}>
               Shuffle
             </Button>
-            {!untagged && (
-              <FavouriteButton on={favourite} name={album.title} onToggle={() => void toggleFavouriteAlbum(albumKey)} />
-            )}
-            <SelectButton small selection={selection} />
             <Button small variant="ghost" icon={<MoreIcon />} aria-label={`More for ${album.title}`} onClick={() => setMenuOpen(true)} />
-          </SelectableActions>
+          </div>
         </div>
       </div>
+      <ListBar selection={selection} tracks={tracks} removal={{ kind: "library" }} onToast={onToast} />
       {menuOpen && (
         <CollectionMenu
           title={album.title}

@@ -804,6 +804,74 @@ mark {
   gap: 12px;
   margin-top: 20px;
 }
+.title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.title-row h1 {
+  flex: 1;
+  min-width: 0;
+}
+.title-row .xh-btn {
+  margin-top: 6px;
+}
+/* Pulls the bar up into .show-head's 40px bottom margin. */
+.list-bar {
+  margin-top: -24px;
+  border-bottom: 1px solid var(--border);
+}
+.list-bar .head-actions {
+  justify-content: flex-end;
+  margin: 0 0 8px;
+}
+.list-bar .selection-bar {
+  justify-content: flex-start;
+}
+.list-bar + .songs {
+  margin-top: 0;
+}
+.add-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  min-height: 64px;
+  padding: 12px 8px 12px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--slow) var(--ease),
+    color var(--slow) var(--ease);
+}
+.add-row:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.add-row:focus-visible {
+  outline-offset: -2px;
+}
+/* Song art sits 56px in, past the drag handle; keep in step with .song-grip and .song-main. */
+.songs + .add-row {
+  padding-left: 56px;
+}
+.add-row-mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px dashed var(--border-strong);
+}
+.add-row-mark svg {
+  width: 16px;
+  height: 16px;
+}
 .col-title {
   display: flex;
   justify-content: space-between;
@@ -1782,7 +1850,11 @@ kbd {
   }
   .show-head .head-actions {
     grid-column: 1 / -1;
-    gap: 8px 12px;
+    flex-wrap: nowrap;
+    gap: 12px;
+  }
+  .show-head .head-actions > .xh-btn:not(.xh-btn--icon) {
+    flex: 1;
   }
   .show-head .xh-art {
     --s: 72px;
